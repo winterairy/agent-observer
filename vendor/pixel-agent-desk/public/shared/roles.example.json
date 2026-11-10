@@ -1,0 +1,10 @@
+{
+  "lead":      { "name": "책임자",   "avatar": "lead.webp" },
+  "planner":   { "name": "기획",     "avatar": "planner.webp" },
+  "architect": { "name": "아키텍트", "avatar": "architect.webp" },
+  "designer":  { "name": "디자인",   "avatar": "designer.webp" },
+  "developer": { "name": "개발",     "avatar": "developer.webp" },
+  "qa":        { "name": "QA",       "avatar": "qa.webp" },
+  "security":  { "name": "보안",     "avatar": "security.webp" },
+  "devops":    { "name": "운영",     "avatar": "devops.webp" }
+}
