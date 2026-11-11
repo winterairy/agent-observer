@@ -19,15 +19,14 @@
 - 보고서 폴더: docs/team/reports/
 
 ## 명령
-아직 코드와 package.json이 없다. 아래는 1단계 구현 후 정해질 값이다.
-- 패키지 관리자: pnpm
+- 패키지 관리자: pnpm (정확한 버전 고정: `pnpm add -E`, `.npmrc` save-exact)
 - 설치: pnpm install
-- 타입 검사: (없음) (추정: pnpm exec tsc --noEmit)
-- 린트: (없음)
-- 단위 테스트: (없음) (추정: Vitest)
-- E2E 테스트: (없음) (추정: Playwright)
-- 빌드: (없음) (추정: pnpm build)
-- 개발 서버: (없음) (추정: pnpm dev → http://127.0.0.1:3000)
+- 타입 검사: pnpm typecheck (= tsc --noEmit)
+- 린트: (없음) — 설계 12절에서 선택. 아직 넣지 않음
+- 단위 테스트: pnpm test (= vitest run, tests/unit·tests/api)
+- E2E 테스트: pnpm test:e2e (= playwright test. 1단계 3차에서 설정 예정, Chromium만)
+- 빌드: pnpm build
+- 개발 서버: pnpm dev → http://127.0.0.1:3000
 
 ## 검증 환경
 - 클라우드에서 검증 가능한 것: Next.js 서버 실행, API 테스트, Playwright(Chromium) 화면 확인, observe.mjs로 실제 이벤트 전송 통합 테스트
