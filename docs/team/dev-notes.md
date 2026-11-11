@@ -65,3 +65,56 @@
 
 - T1-4 로그인(`auth/cookie.ts`, `rateLimit.ts`, `proxy.ts`, login/logout route), T1-5 조회 API(`query/views.ts`에서 `sessionStatus`·`totals`·`calcCost`·roles 매핑 조합, `PRICING.asOf/source`를 응답에 포함), dismiss/restore route(404 판단), T1-6 캐릭터, T1-7 Playwright 화면 흐름·observe.mjs 통합 테스트.
 - profile.md "명령" 절 갱신(이번에 반영함).
+
+## 1단계 개발 2차 (2026-11-11)
+
+범위: T1-4 로그인(서명 쿠키, 실패 제한, proxy 보호, login/logout), T1-5 조회 API(웹 화면 제외), T1-2 정리·다시 표시 route, 해당 단위·API 테스트.
+이번 차수에서 하지 않은 것: 웹 화면(`app/page.tsx`, `/login` 화면), T1-6 캐릭터(`/api/characters*`, `roles.ts`), Playwright E2E.
+
+**범위 변경 반영(사용자 결정 2026-11-11, 책임자 전달)**: 토큰 사용량·API 환산 비용 기능을 1단계에서 뺀다. 그래서 조회 응답에 `usage`·`cost`·`totals`·`pricing`을 넣지 않았고 `GET /api/summary`는 만들지 않았다(보류). 1차의 `cost/pricing.ts`, `aggregate/totals.ts`의 토큰·비용 함수는 지시대로 지우지 않았다(조회 경로에서는 `calledAgents`·`skillSummary`만 쓴다). 저장소·reducer의 usage 병합도 그대로다.
+
+### 구현 내용
+
+| 파일 | 내용 |
+|---|---|
+| `src/auth/cookie.ts` | Web Crypto HMAC-SHA256 서명 쿠키 `v1.<만료초>.<서명>`. 키는 `OBSERVER_SESSION_SECRET`, 없으면 `HMAC(OBSERVER_PASSWORD, "agent-observer-cookie")`. 검증은 `crypto.subtle.verify`(상수 시간). Set-Cookie: HttpOnly, SameSite=Lax, Path=/, Max-Age 30일, Secure는 https(`x-forwarded-proto` 또는 URL)일 때만 |
+| `src/auth/rateLimit.ts` | 메모리 슬라이딩 윈도. IP(`x-forwarded-for` 첫 값, 없으면 `local`)별 1분 5회, 전역 1분 20회. 쌓이면 다음 시도부터 429 + `Retry-After`. 성공 시 그 IP만 초기화. 429로 거부된 시도는 세지 않음. globalThis에 1개 |
+| `src/auth/session.ts` | `requireSession`(쿠키만 확인, Bearer 무시), `checkSameOrigin`(Origin 다른 호스트 → 403), `verifyPassword`(양쪽 SHA-256 후 `timingSafeEqual`) |
+| `proxy.ts` | 설계 4절 보호 범위 표. `/api/*` 401 JSON, 화면 경로는 `/login?next=<내부 경로>` 302. matcher는 `_next/static`, `_next/image`, `favicon.ico`만 제외 → `public/` 정적 파일도 쿠키 필요 |
+| `app/api/auth/login`, `logout` | 순서: Origin 403 → 실패 제한 429 → 본문 4KB 413 → 비밀번호 401 → 204 + Set-Cookie. JSON·form-urlencoded. 로그아웃은 Max-Age=0, 쿠키 없어도 204 |
+| `src/http/response.ts` | `json`, `noContent`, `methodNotAllowed`, `readLimited`. 1차 `app/api/events/route.ts`에 있던 것을 옮겨 같이 쓴다(동작 같음) |
+| `src/query/views.ts` | 순수 DTO 변환(`now` 주입). `sessionsView`(ended 필터, hidden=only, hiddenCount, 정렬), `sessionDetailView`, `projectsView`, `skillsView`. 역할 매핑은 `RoleResolver` 인자(기본 null → lead "책임자", 그 외 원문, characterId null) |
+| `src/query/hide.ts` | dismiss/restore 공통: 401 → 403 → 404 → 204 |
+| `app/api/projects`, `sessions`, `sessions/[key]`, `sessions/[key]/dismiss`, `restore`, `skills` | 모든 route에서 `requireSession` 이중 확인. 처리 안 된 예외는 500 `{"error":"internal"}` + 오류 이름만 로그 |
+| `src/config.ts` | `cookieName`, `loginMaxBodyBytes`(4KB), `loginWindowMs`(1분) 추가 |
+
+검증
+- `pnpm typecheck` 통과, `pnpm test` 256개 통과 + todo 2개(8개 파일. 2차 추가 75개: `tests/unit/auth.test.ts` 14, `tests/api/auth.test.ts` 26, `tests/api/query.test.ts` 35(memory·file 두 구현) — 수는 vitest 출력 기준).
+- `pnpm build` 통과(`ƒ Proxy (Middleware)` 인식 확인).
+- 수동 확인: `next start`(임시 포트·임시 데이터 폴더)에서 쿠키 없이 `/` → 302 `/login`, `/api/sessions` → 401, Bearer만 → 401, 다른 Origin 로그인 → 403, 로그인 후 `/api/sessions` 200. 서버 로그에 비밀번호·토큰 없음.
+
+### 설계와 달라진 점과 이유
+
+1. **응답에서 토큰·비용 필드를 뺐고 `/api/summary`를 만들지 않았다.** 위 범위 변경 때문이다. 설계 5절 예시의 `totals`, 에이전트 `usage`·`cost`, 최상위 `pricing`이 없다. 기획·설계 개정 후 플랜 사용량 API를 따로 만든다.
+2. **`/api/auth/logout`을 proxy 공개 경로에 넣었다.** 설계 4절 표는 `/api/*` 나머지를 401로 막지만 5절은 "쿠키가 없어도 204"라 proxy를 거치면 그 규칙에 닿지 않는다. 쿠키를 지우는 것뿐이라 공개해도 위험이 없어 5절을 따랐다. 로그아웃도 Origin 검사를 한다.
+3. **Origin 헤더가 없는 POST는 통과시킨다.** 브라우저는 POST에 Origin을 붙이므로 CSRF는 막히고, curl·테스트 같은 비브라우저 클라이언트는 쓸 수 있다. `Origin: null`과 해석할 수 없는 값은 403. 비교 대상은 `Host` 헤더(포트 포함).
+4. **`OBSERVER_PASSWORD`가 비어 있으면 쿠키 검증도 항상 실패한다.** `OBSERVER_SESSION_SECRET`만 있고 비밀번호를 지운 경우에 예전 쿠키로 열리지 않게 하려는 것이다("열린 상태로 시작하지 않는다").
+5. **세션 목록 항목에 `dismissedAt`(ISO|null)을 더했다.** `ended=all`에는 숨긴 세션도 섞이므로 화면이 구분할 수 있어야 한다.
+6. **목록 정렬은 승인 대기 → 다른 활성 → 종료 순**이다. 설계는 앞의 둘만 정해 종료 세션의 자리를 적지 않아서 맨 뒤(그 안에서 마지막 이벤트 내림차순)로 두었다.
+7. **`ended`·`hidden` 값이 정의 밖이면 400 `invalid_query`**로 답한다(설계에 없음).
+8. **역할 매핑 기본값은 `null → lead`, 그 외 원문**이다. 설계 5절의 `plugin:qa → qa`는 roles.ts(T1-6)가 있어야 하므로 3차에 `RoleResolver`로 넘긴다. 지금 `displayName`은 lead만 "책임자", 나머지는 원문이고 `characterId`는 모두 null.
+9. **에이전트 `skills` 정렬은 횟수 내림차순, 같으면 이름순**(설계에 없음).
+
+### 알려진 제한
+
+- 로그인 실패 제한은 메모리라 재시작하면 초기화된다(설계 리스크 절).
+- `x-forwarded-for`는 그대로 믿는다. 위조로 IP별 제한을 피해도 전역 20회 제한은 남는다(설계 리스크 절).
+- 로그인 성공 응답은 204라 HTML form을 JS 없이 제출하면 화면이 바뀌지 않는다. 3차 로그인 화면은 `fetch`로 부르고 `next`로 이동해야 한다.
+- 캐릭터 route가 아직 없어 `/api/characters*` 401은 proxy 테스트로만 확인했다. route handler 테스트는 `it.todo` 2개로 남겼다.
+
+### 다음 차수에 넘길 것
+
+- 웹 화면(`/`, `/login`): 로그인은 `POST /api/auth/login` 후 `next`(`safeNextPath`로 다시 확인) 이동, 401이면 `/login`. 숨긴 세션은 `hiddenCount`와 `?hidden=only`.
+- T1-6: `characters/roles.ts`의 `roleKeyFor`로 `RoleResolver`를 만들어 조회 route의 `ctx.roles`에 넘긴다. `/api/characters`, `/api/characters/[id]/image`에 `requireSession`을 넣고 `tests/api/query.test.ts`의 todo 2개를 실제 테스트로 바꾼다.
+- 플랜 사용량 기능은 기획·설계 확정 후. 토큰·비용 코드(`cost/`, `aggregate/totals.ts`의 합계 함수, 1차 테스트) 제거는 따로 지시받는다.
+- Playwright E2E, observe.mjs 통합 테스트(T1-7).
