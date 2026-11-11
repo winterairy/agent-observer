@@ -480,6 +480,7 @@ interface SessionState {
   model: string | null;            // SessionStart.model
   ended: boolean;                  // SessionEnd(R10) 받음. 이후 이벤트가 오면 false로 (S-12)
   dismissedAtTs: number | null;    // 사용자가 "정리"한 시각. 이후 이벤트가 오면 null로
+  restoredAtTs: number | null;     // 사용자가 "다시 표시"한 시각(종료 세션 24시간 표시 기준에 포함)
   lastEventTs: number;             // 세션 내 최대 ts
   agents: Record<string, AgentState>;   // 키: agent_id 또는 '__lead__'
   skills: Record<string /*agentKey*/, Record<string /*skill*/, { count: number; lastTs: number }>>;
@@ -520,7 +521,7 @@ interface Store {
   listProjects(): Promise<string[]>;
   recentEvents(key: string, limit: number): Promise<NormalizedEvent[]>;   // 디버그용, API로 노출 안 함
   dismiss(key: string, now: number): Promise<void>;
-  restore(key: string): Promise<void>;               // "다시 표시": dismissedAtTs를 null로   // "정리": dismissedAtTs 기록. reducer는 새 이벤트에서 null로 되돌림
+  restore(key: string, now: number): Promise<void>;  // "다시 표시": dismissedAtTs를 null로, restoredAtTs = now   // "정리": dismissedAtTs 기록. reducer는 새 이벤트에서 null로 되돌림
   prune(now: number): Promise<void>;     // D-4: 세션당 500개, 7일 지난 이벤트 삭제(스냅숏은 유지)
 }
 ```
@@ -594,10 +595,12 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 `{"projects":[{"project":"winterairy/epub-editor","sessions":3,"active":1}]}`
 
 #### GET /api/sessions?project=<이름>&ended=<recent|none|all> (쿠키)
-- `ended` 기본 `recent` = 종료 세션은 마지막 이벤트가 24시간 안인 것만(D-17).
+- `ended` 기본 `recent` = 종료 세션은 `max(lastEventTs, restoredAtTs)`가 24시간 안인 것만(D-17). 다시 표시한 세션은 다시 표시한 때부터 24시간 보인다.
+- 응답 최상위에 `hiddenCount`(같은 project 필터 기준 숨긴 세션 수)를 넣는다. 화면은 이 값으로 "숨긴 세션 N개 보기"를 그리고, 펼쳤을 때만 `hidden=only`를 부른다.
+- `hidden=only`는 `project` 필터와 함께 쓸 수 있다.
 - 정렬: 승인 대기 세션 먼저(기다린 시간이 긴 순), 그다음 다른 활성 세션, 그 안에서 `lastEventTs` 내림차순. `dismissedAtTs`가 있는 세션은 `ended=all`일 때만 포함.
 ```json
-{ "now": "2026-11-11T10:00:03Z",
+{ "now": "2026-11-11T10:00:03Z", "hiddenCount": 0,
   "sessions": [{
     "key": "UDEKMGMwOQ", "sessionId": "0c09…", "project": "P1", "branch": "main", "remote": true,
     "status": "waiting", "waitingSince": "2026-11-11T08:00:01Z", "stale": false, "lastEventAt": "2026-11-11T10:00:01Z",
