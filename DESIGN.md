@@ -2,17 +2,19 @@ name: agent-observer
 status: draft            # draft(초안, 승인 대기) | approved(승인됨)
 description: |
   여러 Claude Code 세션과 BOT의 상태·토큰·비용을 한눈에 보는 개인용 관찰 도구.
-  무채색 표면 위에 상태 색 6가지만 의미를 갖고, 포인트 색(파랑)은 선택·주요 동작에만 쓴다.
+  무채색 표면 위에 상태 색 6가지만 유채색을 갖는다. 주요 동작·선택·포커스는 유채색이 아닌 잉크색(거의 검정/거의 흰색)으로 표현해 상태 색과 겹치지 않게 한다.
   장식보다 정보 밀도와 상태 구분(색 + 아이콘 + 문구)을 우선한다. 라이트/다크 모두 지원한다.
 
 colors:
   # 라이트 값. 다크 값은 2절 표. 컴포넌트는 반드시 CSS 변수 이름(--color-<역할>)으로만 참조한다.
-  primary: "#2F5BD3"          # 주요 버튼, 링크, 선택된 세션·필터, 포커스 링
+  primary: "#1A1D23"          # 주요 버튼 배경, 선택 막대, 탭 선택 막대, 포커스 링 (= ink. 유채색 아님)
+  primary-hover: "#33373F"    # primary 버튼 호버
   primary-on: "#FFFFFF"       # primary 위의 텍스트
   canvas: "#F6F7F9"           # 페이지 배경
   surface: "#FFFFFF"          # 카드, 패널
   surface-elevated: "#FFFFFF" # 툴팁, 드롭다운(그림자로 구분)
-  surface-sunken: "#EEF0F3"   # 표 머리줄, 임시 사무실 바닥, 스켈레톤
+  surface-sunken: "#EEF0F3"   # 표 머리줄, 임시 사무실 바닥, 스켈레톤, 호버 배경
+  surface-selected: "#E9ECF1" # 선택된 세션 행 배경(막대와 함께 씀)
   ink: "#1A1D23"              # 제목, 본문
   ink-muted: "#5B6270"        # 보조 텍스트(시각, 브랜치, 단위)
   border: "#D5D9E0"           # 구분선, 카드 테두리(장식용, 대비 요구 없음)
@@ -20,7 +22,7 @@ colors:
   success: "#166534"
   warning: "#7A4A00"
   danger: "#B42318"
-  info: "#1D4ED8"
+  info: "#1D4ED8"             # = status-working-fg. 1단계 화면에서는 작업 중 상태 외에 쓰지 않는다
   # 상태 색: 각 상태는 fg(글자·아이콘)와 bg(배지 배경) 한 쌍
   status-working-fg: "#1D4ED8"
   status-working-bg: "#E6EEFF"
@@ -41,8 +43,8 @@ typography:
   font-body: "system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', Roboto, sans-serif"
   font-mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, 'D2Coding', monospace"
   scale:          # 크기 / 줄간격 / 굵기 / 자간
-    h1: "20px / 1.3 / 700 / -0.01em"     # 헤더 제목, 로그인 제목
-    h2: "16px / 1.4 / 700 / 0"           # 패널 제목(세션 목록, 세션 상세, 합계, 사무실)
+    h1: "20px / 1.3 / 600 / -0.01em"     # 헤더 제목, 로그인 제목
+    h2: "16px / 1.4 / 600 / -0.005em"           # 패널 제목(세션 목록, 세션 상세, 합계, 사무실)
     h3: "14px / 1.4 / 600 / 0"           # 카드 안 제목(세션 이름, BOT 이름)
     body: "14px / 1.6 / 400 / 0"
     small: "13px / 1.5 / 400 / 0"
@@ -56,12 +58,12 @@ spacing:
 radius:
   sm: "4px"       # 배지, 사무실 사각형
   md: "6px"       # 버튼, 입력창, 선택 상자
-  lg: "10px"      # 카드, 패널
+  lg: "8px"       # 카드, 패널
   full: "9999px"  # 상태 점
 
 shadow:
-  sm: "0 1px 2px rgba(16,24,40,0.06)"     # 카드(라이트만)
-  md: "0 4px 12px rgba(16,24,40,0.12)"    # 툴팁
+  sm: "0 1px 1px rgba(16,24,40,0.02), 0 2px 2px rgba(16,24,40,0.04)"                                  # 카드(라이트만, 테두리와 함께)
+  md: "0 1px 1px rgba(16,24,40,0.02), 0 8px 16px -4px rgba(16,24,40,0.08), 0 24px 32px -8px rgba(16,24,40,0.10)"  # 툴팁(작은 그림자 여러 겹)
 
 breakpoints:
   mobile: "390px"     # 기준 폭. 0~767px는 한 열
@@ -82,19 +84,23 @@ breakpoints:
 
 - **사용 원칙**
   - 의미를 갖는 색은 상태 색 6가지(작업 중·생각 중·승인 대기·응답 없음·완료·종료)뿐이다. 그 외 표면은 무채색이다.
-  - primary는 선택 상태, 포커스, 화면의 주요 동작(로그인 버튼)에만 쓴다.
+  - primary는 잉크색이다(라이트 #1A1D23, 다크 #E8EAEE). 주요 동작(로그인 버튼), 선택 표시 막대, 포커스 링에만 쓴다. 유채색 포인트 색은 두지 않는다 — 파랑은 오직 "작업 중"이다.
+  - 선택은 "표면 한 단계 올림(surface-selected) + 왼쪽 잉크 막대 + aria-current"로, 상태는 "상태 색 + 아이콘 + 문구"로 표현해 두 표현 방식이 서로 다른 축을 쓴다.
+  - 링크는 ink 글자 + 밑줄(호버 시 밑줄 굵게). 파랑 링크를 쓰지 않는다.
   - 상태는 **색 + 아이콘 + 문구** 세 가지를 항상 함께 보인다(6절 "상태 표현"). 색만으로 구분하지 않는다.
   - danger는 오류 메시지와 "응답 없음" 상태에만 쓴다. "정리" 버튼은 위험 동작이 아니므로(되돌아옴) danger를 쓰지 않는다.
 - **다크 모드**: 지원. `prefers-color-scheme: dark`를 따른다(수동 전환 버튼은 1단계 범위 밖). 값은 아래.
 
 | 역할 | 라이트 | 다크 |
 |---|---|---|
-| primary | #2F5BD3 | #7EA2FF |
+| primary | #1A1D23 | #E8EAEE |
+| primary-hover | #33373F | #FFFFFF |
 | primary-on | #FFFFFF | #0F1115 |
 | canvas | #F6F7F9 | #0F1115 |
 | surface | #FFFFFF | #171A21 |
 | surface-elevated | #FFFFFF | #1F232C |
 | surface-sunken | #EEF0F3 | #12151B |
+| surface-selected | #E9ECF1 | #232833 |
 | ink | #1A1D23 | #E8EAEE |
 | ink-muted | #5B6270 | #A0A7B4 |
 | border | #D5D9E0 | #2E3440 |
@@ -115,10 +121,14 @@ breakpoints:
 | 조합 | 라이트 | 다크 | 통과 |
 |---|---|---|---|
 | ink / canvas | 15.75 | 15.69 | O |
+| ink / surface-selected (선택 행 글자) | 14.26 | 12.25 | O |
 | ink-muted / canvas | 5.72 | 7.81 | O |
 | ink-muted / surface | 6.13 | 7.20 | O |
-| primary-on / primary | 5.90 | 7.65 | O |
-| primary / surface (링크) | 5.90 | 7.05 | O |
+| ink-muted / surface-selected | 5.18 | 6.10 | O |
+| primary-on / primary (로그인 버튼) | 16.88 | 15.69 | O |
+| primary-on / primary-hover | 11.94 | 18.90 | O |
+| primary / surface (포커스 링·선택 막대, 비텍스트) | 16.88 | 14.45 | O (비텍스트) |
+| primary / canvas (포커스 링) | 15.75 | 15.69 | O (비텍스트) |
 | danger / surface | 6.57 | 7.63 | O |
 | working fg / bg | 5.76 | 7.08 | O |
 | thinking fg / bg | 6.07 | 7.57 | O |
@@ -137,7 +147,10 @@ breakpoints:
   - 토큰: 1,000 미만은 그대로, 이상은 `12.3K`, `1.2M`(소수 1자리). 표의 `title`에 전체 값(`12,285`).
   - 비용: `$0.0123`처럼 `$` + 소수 4자리(0.0001 미만은 `<$0.0001`). 추정이면 뒤에 "추정" 배지.
   - 시각: 상대 시간("3분 전", "2시간째"). `<time datetime>` + `title`에 현지 절대 시각.
-- **글꼴 라이선스**: 운영체제 기본 글꼴만 쓴다. 웹폰트·폰트 파일을 추가하지 않는다(과업 조건). Pretendard 등은 쓰지 않는다.
+- **굵기 상한 600**: 제목도 600을 넘지 않는다(레퍼런스 Vercel·Linear의 공통 원칙, 차분한 인상). 강조는 크기·색이 아니라 굵기 500/600으로.
+- **mono는 기술 식별자에만**: 세션 ID, 브랜치, 역할 키(`qa`), 모델 이름. 본문·문구에는 쓰지 않는다.
+- **글꼴 라이선스**: 운영체제 기본 글꼴만 쓴다. 폰트 파일을 저장소에 추가하지 않는다.
+- **제안(미적용, 별도 판단 필요)**: 운영체제마다 한글 글꼴이 달라 화면 인상이 바뀐다. 통일하려면 Pretendard(SIL OFL, 무료) 가변 웹폰트를 본문 글꼴로, mono는 JetBrains Mono(OFL)를 검토할 수 있다. 저장소 추가 또는 CDN 사용 여부는 책임자·사용자가 정한다.
 
 ## 4. 레이아웃
 
@@ -149,7 +162,8 @@ breakpoints:
 
 ## 5. 깊이와 표면
 
-- 카드·패널은 `surface` + 1px `border`. 라이트는 shadow-sm을 더하고, 다크는 그림자 없이 테두리만.
+- 카드·패널은 `surface` + 1px `border`. 라이트는 shadow-sm(작은 그림자 두 겹)을 더하고, 다크는 그림자 없이 테두리와 표면 단계(canvas → surface → surface-elevated)로만 깊이를 준다.
+- 표면 단계: canvas(페이지) < surface(패널) < surface-selected(선택 행) < surface-elevated(툴팁). 단계를 건너뛰어 섞지 않는다.
 - 툴팁은 `surface-elevated` + shadow-md(다크는 border).
 - z-index: 기본 0, 헤더 10, 툴팁 20. 모달은 1단계에 없다.
 
@@ -157,7 +171,7 @@ breakpoints:
 
 CSS Module 파일 이름 기준. 모든 상호작용 요소는 포커스 링(아래)과 최소 터치 영역 44×44px(모바일)을 지킨다.
 
-공통 포커스: `:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }` — outline을 지우지 않는다.
+공통 포커스: `:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }` — outline을 지우지 않는다. primary가 잉크색이므로 포커스 링은 어떤 상태 배지·상태 막대와도 색이 겹치지 않는다.
 공통 비활성: 불투명도 0.5, `cursor: not-allowed`, `aria-disabled` 또는 `disabled`.
 
 ### 상태 표현 (StatusBadge) — 핵심 규칙
@@ -189,10 +203,10 @@ CSS Module 파일 이름 기준. 모든 상호작용 요소는 포커스 링(아
 | secondary | 정리, 다시 시도, 로그아웃 | surface | ink | 1px border-strong | 32px(데스크톱) / 40px(모바일) | md |
 | ghost | 접기/펼치기, 닫기 | 투명 | ink-muted | 없음 | 32px / 40px | md |
 
-- 호버: primary는 밝기 -8%(`filter` 대신 `color-mix(in srgb, var(--color-primary) 92%, black)`), secondary·ghost는 배경 surface-sunken.
+- 호버: primary는 배경 primary-hover, secondary·ghost는 배경 surface-sunken.
 - 눌림: 호버 색 + `transform: translateY(1px)`.
 - 로딩: 글자를 "로그인 중…"으로 바꾸고 비활성.
-- 다크 모드 primary 호버는 `color-mix(... 90%, white)`.
+- 다크 모드에서도 같은 토큰(primary-hover)을 쓴다. color-mix로 색을 만들지 않는다.
 
 ### 입력창·폼 (TextField, Select)
 - 높이 40px(모바일 44px), 1px border-strong, radius md, 안쪽 여백 12px, body 글자, 배경 surface.
@@ -210,8 +224,9 @@ CSS Module 파일 이름 기준. 모든 상호작용 요소는 포커스 링(아
 - 1줄: 프로젝트 이름(h3, 말줄임) + 클라우드 표시(`remote`가 true일 때 텍스트 배지 "클라우드": 1px border-strong 테두리, ink-muted 글자, 투명 배경)
 - 2줄: StatusBadge + 브랜치(mono, small, ink-muted) + "BOT N" + 마지막 이벤트 상대 시간
 - 오른쪽: "정리" secondary 버튼(행 버튼 안에 중첩하지 않도록 행은 `<li>` 안에 링크와 정리 버튼을 형제로 둔다).
-- 선택됨: 왼쪽 3px primary 막대 + 배경 `color-mix(in srgb, var(--color-primary) 8%, var(--color-surface))`, `aria-current="true"`.
-- 승인 대기 행: 왼쪽 막대 status-waiting-fg(응답 없음은 status-stale-fg). 선택됨과 겹치면 막대는 상태 색, 배경은 선택 색.
+- 선택됨: 왼쪽 3px primary(잉크) 막대 + 배경 surface-selected + 프로젝트 이름 600, `aria-current="true"`.
+- 승인 대기 행: 왼쪽 막대 status-waiting-fg(응답 없음은 status-stale-fg). 선택됨과 겹치면 막대는 상태 색, 배경은 surface-selected, 이름 600 — 선택은 배경·굵기로, 상태는 막대·배지로 읽힌다.
+- 작업 중 행은 막대를 두지 않는다(배지로 충분). 따라서 파란 막대는 화면 어디에도 없다.
 
 ### BOT 행 (AgentRow)
 - 1줄: 표시 이름(h3) + 역할 키(caption, mono, ink-muted, 예: `qa`) + StatusBadge
@@ -268,9 +283,12 @@ CSS Module 파일 이름 기준. 모든 상호작용 요소는 포커스 링(아
 - 긴 이름은 말줄임 + `title`. 가로 스크롤을 만들지 않는다.
 
 ### Don't
-- colors에 없는 색, 그라데이션, 장식 그림자를 쓰지 않는다.
+- colors에 없는 색, 그라데이션, 장식 그림자를 쓰지 않는다. 그림자는 작은 그림자 여러 겹(shadow 토큰)만.
+- 유채색을 선택·포커스·버튼에 쓰지 않는다. 유채색은 상태 전용이다.
+- 제목에 700 이상 굵기, 전부 대문자 표기를 쓰지 않는다.
+- 탭·버튼을 알약(pill) 모양으로 만들지 않는다. 버튼은 radius md(6px).
 - 아이콘만으로 상태를 나타내지 않는다. 배지를 깜박이게 하지 않는다.
-- 외부 폰트·이미지·아이콘 파일을 추가하지 않는다.
+- 폰트·이미지·아이콘 파일을 저장소에 추가하지 않는다(웹폰트는 3절 제안 참조).
 - 원본 Pixel Agent Desk 그림을 쓰거나 본뜨지 않는다.
 - 프롬프트·응답·도구 입력을 화면에 보이지 않는다(수집하지 않음).
 
@@ -290,46 +308,67 @@ CSS Module 파일 이름 기준. 모든 상호작용 요소는 포커스 링(아
 
 ## 11. 레퍼런스
 
-이번 초안은 외부 디자인 레퍼런스(이미지, 다른 제품의 DESIGN.md, 폰트·아이콘 세트)를 가져오지 않았다. 과업 조건이 "외부 이미지·폰트 파일 추가 금지"였고 `docs/design-refs/`도 없어서, 실제 기준은 공개 접근성 표준과 널리 쓰이는 웹 관례뿐이다. 특정 제품 화면을 열어 보고 따라 한 것은 없다.
+2026-11-11 재검토에서 awesome-design-md 컬렉션(https://github.com/VoltAgent/awesome-design-md) 목록을 읽고, 개발자 도구 계열 후보(Linear, Vercel, Sentry, Supabase, PostHog, Raycast) 가운데 아래 두 개를 골라 원문 DESIGN.md 전체를 읽었다. 이 문서들은 각 회사의 **마케팅 사이트**를 분석한 것이라, 앱 화면에 맞는 원칙(색 역할, 타이포 위계, 간격, 깊이, 컴포넌트 형태, Do/Don't)만 가져왔다. 로고, 고유 이름, 고유 글꼴, 브랜드 그라데이션, 특정 화면 배치는 쓰지 않았다.
 
-### 11.1 실제로 기준으로 삼은 것
-
-| 영역 | 레퍼런스 | 가져온 것 | 다르게 한 것 |
-|---|---|---|---|
-| 색 대비 | WCAG 2.2 대비 기준 1.4.3·1.4.11 — https://www.w3.org/TR/WCAG22/#contrast-minimum | 상대 휘도 공식, 본문 4.5:1과 비텍스트 3:1 기준. 2절 표의 값은 이 공식으로 직접 계산했다 | 기준보다 여유를 두어 모든 텍스트 조합을 5.3:1 이상으로 잡았다 |
-| 상태 표현 | WCAG 2.2 1.4.1 색 사용 — https://www.w3.org/TR/WCAG22/#use-of-color | 색만으로 정보를 전달하지 않는다는 원칙 → 색 + 아이콘 + 문구 세 겹 | 상태마다 아이콘 모양 자체를 다르게 했다(원/삼각형 등). 색맹 시뮬레이션은 하지 않았다 |
-| 탭(합계) | WAI-ARIA Authoring Practices, Tabs 패턴 — https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ | `tablist/tab/tabpanel` 역할, 화살표·Home/End 이동, 자동 활성 | 탭은 두 개뿐이라 세로 방향·수동 활성 같은 변형은 쓰지 않았다 |
-| 포커스·키보드 | WCAG 2.2 2.4.7 포커스 표시, 2.4.3 포커스 순서, 2.4.1 블록 건너뛰기 | 보이는 포커스 링, DOM 순서 = Tab 순서, "본문으로 건너뛰기" 링크 | 포커스 링 색은 primary 하나로 정했다(별도 포커스 색 없음) |
-| 터치 영역 | WCAG 2.2 2.5.5 대상 크기(AAA, 44×44 CSS px) — https://www.w3.org/TR/WCAG22/#target-size-enhanced | 모바일 최소 44×44px | 데스크톱은 밀도를 위해 32px 버튼을 허용했다(AA 2.5.8의 24px 이상은 만족) |
-| 움직임 | CSS `prefers-reduced-motion` 미디어 기능(Media Queries Level 5) | 줄이기 설정 시 움직임 끔 | — |
-| 다크 모드 | CSS `prefers-color-scheme`, `color-scheme` 속성 | 시스템 설정을 따름 | 수동 전환은 넣지 않았다(미결 사항) |
-| 글꼴 | 각 운영체제 기본 글꼴(system-ui, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR) | 파일을 추가하지 않고 한글을 표시하는 시스템 글꼴 스택 | 웹폰트(Pretendard 등)는 조건 때문에 쓰지 않았다 |
-| 표 마크업 | HTML 표준 `<table>`·`<caption>`·`<th scope>`, 네이티브 `<select>`·`<details>` | 브라우저 기본 접근성 동작을 그대로 쓴다 | — |
-
-### 11.2 레퍼런스 없이 직접 정한 것
-
-| 결정 | 근거 |
-|---|---|
-| 상태 색 배정(작업 중 파랑, 생각 중 보라, 승인 대기 앰버, 응답 없음 빨강, 완료 초록, 종료 회색) | 레퍼런스 없음, 이유: 특정 시스템을 따르지 않았다. "앰버 = 주의, 빨강 = 문제, 초록 = 끝남, 회색 = 비활성"이라는 일반 관례에 맞춰 직접 골랐고, 값은 대비 계산으로만 검증했다 |
-| 상태 아이콘 6종 모양 | 레퍼런스 없음, 이유: 아이콘 세트 추가가 금지돼 있어 단순한 도형(재생 삼각형, 점 셋, 원 안 느낌표, 삼각형 안 느낌표, 체크, 속 빈 원)으로 직접 정했다 |
-| 무채색 표면 + 포인트 색 하나 | 레퍼런스 없음, 이유: 개발자용 대시보드에서 흔한 방식이라는 일반 지식에 기댔을 뿐, 특정 제품을 보고 정하지 않았다 |
-| 배치(1280 3열 목록 | 상세 | 사무실·합계, 390 한 열) | 레퍼런스 없음, 이유: 일반적인 목록-상세 패턴을 HANDOFF 8절 요구(한 페이지 `/`, `?session=`)에 맞춰 직접 배치했다 |
-| 글자 크기(본문 14px)·간격(4px 단위)·모서리 값 | 레퍼런스 없음, 이유: 정보 밀도를 우선해 직접 정했다 |
-| 컴포넌트 형태(SessionRow, WaitingBanner, AgentRow 등) | 레퍼런스 없음, 이유: HANDOFF T1-5 요구와 API 응답 필드(5절)에서 직접 도출했다 |
-| 임시 사무실(단색 사각형, 세 구역, 책상 막대) | 레퍼런스 없음, 이유: HANDOFF T1-5·설계 8절의 "단색 사각형, 책상 줄/대기 줄/경고 표시"만 기준으로 했다. **원본 Pixel Agent Desk 그림·화면은 보지도 참고하지도 본뜨지도 않았다** |
-
-### 11.3 후보(미적용)
-
-사용자가 원하면 비교해 볼 만한 공개 디자인 시스템이다. 이번 초안에는 반영하지 않았고, 원문도 읽지 않았다. 반영하려면 외부 자료 참고 허가가 필요하다.
-
-| 후보 | 공개 URL | 비교해 볼 점 |
+| 레퍼런스 | 원문 | 고른 이유 |
 |---|---|---|
-| GitHub Primer | https://primer.style | 개발자 도구의 상태 배지·라벨 색 체계, 촘촘한 목록 밀도 |
-| IBM Carbon Design System | https://carbondesignsystem.com | 상태 표시를 색과 모양으로 함께 구분하는 규칙, 데이터 표 패턴 |
-| awesome-design-md 컬렉션(개발자 도구 계열 항목) | https://github.com/VoltAgent/awesome-design-md | 팀 기본 절차의 초안 레퍼런스 출처. 어울리는 항목 2~3개를 골라 조합해 볼 수 있다 |
+| Linear | `design-md/linear.app/DESIGN.md` | 엔지니어용 도구, "촘촘하고 정밀한" 성격. 유채색 포인트를 포커스·주요 버튼에만 아껴 쓰고, 깊이를 그림자 대신 표면 단계와 가는 테두리로 만든다 — 다크 모드와 상태 밀도가 높은 이 제품에 맞다 |
+| Vercel | `design-md/vercel/DESIGN.md` | 개발 플랫폼(배포 대시보드). 주요 버튼이 유채색이 아닌 잉크색이고, 상태(성공·경고·오류)용 색을 따로 둔다 — 이번 파랑 충돌의 해법이 여기서 나왔다. 라이트 표면 단계(흰 카드 / 98% 바탕 / 95% 안쪽)가 현재 초안과 같은 구조라 비교가 쉬웠다 |
+
+Sentry 원문은 앞부분(색 토큰, 글꼴)만 훑었고, 마케팅용 장식 색(라임·핑크)이 중심이라 고르지 않았다. 나머지 후보는 목록 설명만 읽었다.
+
+### 11.1 가져온 것과 다르게 한 것
+
+| 영역 | 가져온 것 (출처) | 다르게 한 것 |
+|---|---|---|
+| 주요 동작 색 | 주요 버튼을 잉크색(거의 검정)으로 칠하고 유채색과 분리 (Vercel `primary #171717`) | 잉크 값은 기존 ink(#1A1D23 / #E8EAEE)를 그대로 써 토큰을 늘리지 않았다. Vercel은 링크·성공에 파랑을 쓰지만 여기서는 파랑을 "작업 중" 전용으로 남기고 링크는 잉크+밑줄 |
+| 유채색 절제 | 유채색 포인트는 포커스·주요 버튼에만, 장식 금지 (Linear Do/Don't "lavender ONLY for…", "Don't introduce a second chromatic accent") | Linear는 포인트 색 하나를 남기지만, 여기서는 상태 색 6가지가 이미 유채색이라 포인트 색을 아예 없앴다 |
+| 선택 표현 | "선택 = 표면 한 단계 올림" (Linear pricing-tab-selected: surface-2 배경) | surface-selected 토큰을 새로 두고 왼쪽 잉크 막대·aria-current를 더했다(색 대비 1.18이라 배경만으로는 부족) |
+| 깊이 | 표면 단계 + 1px 테두리, 다크에서 그림자 거의 없음 (Linear Elevation 표) / 작은 그림자 여러 겹 (Vercel Level 2·5) | 다크는 그림자 0, 라이트는 shadow-sm 두 겹·shadow-md 세 겹. Vercel의 inset 테두리 대신 실제 1px border 유지 |
+| 글자 굵기 | 제목 굵기 상한 600, 700 이상 금지 (Vercel Principles, Linear Do "resists 700+") | h1·h2를 700 → 600. 큰 제목의 강한 음수 자간은 가져오지 않았다(20px 이하 제목뿐이고 한글은 자간을 크게 줄이면 읽기 어렵다) |
+| mono 역할 | mono는 기술 레이어(ID, 코드, 기술 라벨)에만, 본문 금지 (Vercel Principles, Linear "status / ID tokens") | 기존 규칙과 같아 명시만 했다. Vercel의 mono 눈썹 제목(eyebrow)은 쓰지 않았다 |
+| 간격 | 4px 기준, 4·8·12·16·24·32·48 (두 문서 공통) | 이미 같은 척도였다. 마케팅용 64·96px 이상은 앱 화면에 필요 없어 넣지 않았다 |
+| 모서리 | 버튼·입력 6px, 카드 8px, 상태 배지 4px (Vercel `--geist-radius` 6 / marketing 8, Linear xs 4) | 카드 10 → 8px. 알약형 CTA(Vercel 100px, Linear pill)는 앱 화면에 맞지 않아 금지로 적었다 |
+| 입력 높이 | 40px 기본, 촘촘한 곳 32px (Vercel form-input / -sm) | 모바일은 44px 유지(WCAG 2.5.5) |
+| 헤더 | 상단 고정, 높이 56px (Linear top-nav) | 기존 값과 같다 |
+| 상태 배지 | 작은 배지, caption 글자 (Linear status-badge) | Linear는 무채색 알약 배지지만, 여기서는 상태 색 bg/fg + 아이콘 + 문구를 유지했다(WCAG 1.4.1) |
+
+### 11.2 레퍼런스와 무관하게 유지한 기준
+
+| 영역 | 기준 |
+|---|---|
+| 색 대비 | WCAG 2.2 1.4.3·1.4.11 (https://www.w3.org/TR/WCAG22/#contrast-minimum). 2절 표는 상대 휘도 공식으로 직접 계산했다 |
+| 상태 표현 | WCAG 2.2 1.4.1 색 사용 — 색 + 아이콘 + 문구 세 겹 |
+| 탭 | WAI-ARIA APG Tabs 패턴 |
+| 포커스·키보드 | WCAG 2.2 2.4.7, 2.4.3, 2.4.1 |
+| 터치 영역 | WCAG 2.2 2.5.5(모바일 44×44), 데스크톱 32px 버튼은 2.5.8(24px) 만족 |
+| 움직임·다크 | `prefers-reduced-motion`, `prefers-color-scheme` |
+| 상태 색 배정·아이콘 6종·배치·임시 사무실 | 레퍼런스 없이 HANDOFF T1-5와 일반 관례로 직접 정했다. **원본 Pixel Agent Desk 그림·화면은 보지도 참고하지도 본뜨지도 않았다** |
+
+### 11.3 쓰지 않은 것
+
+- 두 브랜드의 로고, 이름, 고유 글꼴(Geist, Linear 전용 글꼴), Vercel 메시 그라데이션, Linear 라벤더 색, 제품 스크린숏 중심 배치.
+- Linear의 다크 전용 원칙("light mode 없음") — 이 제품은 라이트/다크 모두 지원한다.
 
 ## 12. 미결 사항
 
 - 다크 모드 수동 전환 여부(1단계는 시스템 설정만).
 - 정리한 세션을 다시 보는 화면(API `ended=all`) 제공 여부 — 1단계 명세에는 "숨긴 세션 보기" 토글을 넣지 않았다.
 - 3단계 사무실 그림이 정해지면 6절 임시 사무실 항목을 교체한다.
+- 웹폰트(Pretendard, JetBrains Mono) 도입 여부(3절 제안).
+- `docs/team/reports/design-palette.png`는 이전 팔레트(파랑 포인트) 기준이라 이번 값과 다르다. 승인 전 다시 만들어야 한다.
+
+## 13. 이전 초안과 달라진 점
+
+1. **파랑 충돌 해결**: primary #2F5BD3 / #7EA2FF(파랑) → 잉크색 #1A1D23 / #E8EAEE. 파랑(#1D4ED8 / #8FB1FF)은 "작업 중" 상태 전용이 됐다. 선택·포커스·주요 버튼에는 유채색을 쓰지 않는다.
+2. 토큰 추가: `primary-hover`(#33373F / #FFFFFF), `surface-selected`(#E9ECF1 / #232833). color-mix로 호버 색을 만들던 규칙 삭제.
+3. 선택된 세션 행: primary 8% 섞은 파란 배경 → surface-selected 배경 + 왼쪽 잉크 막대 + 이름 600.
+4. 링크: 파랑 글자 → ink 글자 + 밑줄.
+5. 탭 선택 막대: 파랑 → 잉크(명세 반영).
+6. 대비 표 갱신: primary 관련 행을 새 값으로 다시 계산하고, 선택 행 글자·포커스 링 행 추가.
+7. 글자 굵기: h1·h2 700 → 600, 굵기 상한 600 규칙 추가. mono 사용 범위 명시.
+8. 모서리: 카드·패널 radius lg 10 → 8px. 알약형 버튼·탭 금지.
+9. 그림자: 한 겹 → 작은 그림자 여러 겹(shadow-sm 두 겹, shadow-md 세 겹). 다크는 그림자 없이 표면 단계로 깊이.
+10. 표면 단계 순서(canvas < surface < surface-selected < surface-elevated)를 명시.
+11. 웹폰트를 "금지"에서 "파일 추가 없이 쓰되, 도입은 제안으로 남김"으로 바꿈.
+12. 11절 레퍼런스: "외부 레퍼런스 없음" → Linear·Vercel 원문을 읽고 가져온 것·다르게 한 것을 표로 정리.

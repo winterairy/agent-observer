@@ -319,7 +319,7 @@ BOT 목록 (h3 "BOT ({N})")
 ## 7. 새 컴포넌트
 
 이 명세에서 쓰는 컴포넌트는 모두 DESIGN.md 6절에 정의했다(WaitingBanner, SessionRow, AgentRow, EstimateTag, Note, ErrorBar, SyncIndicator, OfficeFloor/OfficeAvatar 포함). 추가로 필요한 것: 탭(Tabs) — DESIGN.md에 없으므로 여기서 정의한다.
-- Tabs: 높이 36px(모바일 44px), 글자 small 600. 비선택 ink-muted, 선택 ink + 아래 2px primary 막대. 탭 목록 아래 1px border. 호버 시 ink.
+- Tabs: 높이 36px(모바일 44px), 글자 small 600. 비선택 ink-muted, 선택 ink 600 + 아래 2px primary(잉크색) 막대. 탭 목록 아래 1px border. 호버 시 ink.
 
 ## 8. 화면에 보이지 않는 것(확인용)
 - 프롬프트·응답·도구 입력·명령 인자. UserPromptExpansion의 `command`도 화면에 쓰지 않는다(설계상 원본 이벤트에만 저장).
