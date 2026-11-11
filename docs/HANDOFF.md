@@ -657,7 +657,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 `id`는 `^[a-z0-9_-]{1,64}$`만. 설정의 `image` 파일명은 `characters/<id>/` 안의 파일만(`path.resolve` 후 접두사 확인으로 경로 이탈 차단). png/webp만, `Cache-Control: private, max-age=60`. 없으면 404.
 
 ### 6. API 환산 비용 (T1-3)
-- `cost/pricing.ts`: `{ asOf: '<기준일>', source: '<URL>', models: Record<string,{input:number; output:number}> /*USD per 1M*/ }`. 계산 `input*in + cache_read*in*0.1 + cache_creation*in*1.25 + output*out`, 결과 `Math.round(x*1e5)/1e5`(vendor 방식). 캐시 쓰기 1.25배는 5분 캐시 기준(1시간 캐시 2배는 payload에 구분이 없어 반영 안 함 — 리스크).
+- `cost/pricing.ts`: `{ asOf: '<기준일>', source: '<URL>', models: Record<string,{input:number; output:number}> /*USD per 1M*/ }`. 계산 `input*in + cache_read*in*cacheReadMul + cache_creation*in*1.25 + output*out`. `cacheReadMul`은 모델별(기본 0.1, 가격 페이지에 따로 적힌 모델은 그 값. 예: Opus 5.5·Sonnet 5.5는 0.05 — 2026-11-11 개발 1차에서 확인), 결과 `Math.round(x*1e5)/1e5`(vendor 방식). 캐시 쓰기 1.25배는 5분 캐시 기준(1시간 캐시 2배는 payload에 구분이 없어 반영 안 함 — 리스크).
 - 모델 이름 매칭: 정확히 같은 키 → 없으면 날짜 접미사(`-20251001` 등)를 뗀 키 → 없으면 Sonnet 최신 단가 + `estimated:true`(D-11). `model`이 null이어도 추정.
 - 단가표 대상(D-10): Opus·Sonnet·Haiku 최신 세대(5.x, `claude-haiku-5-5` 포함)와 4.5, 4.6. 개발 BOT이 구현 시 Anthropic 공개 가격 페이지에서 값을 확인해 넣고 `asOf`·`source`를 적는다. 참고로 vendor의 Opus 4.5/4.6 값($15/$75)과 Haiku 값($0.8/$4)은 현재 공개 단가와 다르므로 그대로 옮기지 않는다.
 - 합계 비용은 에이전트별 비용의 합(에이전트마다 자기 모델 단가). `estimated`는 하나라도 추정이면 true.
