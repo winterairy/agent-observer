@@ -13,8 +13,8 @@
 | 기획 | 완료 | planner | docs/HANDOFF.md#1단계-task | T1-1~T1-7, 결정 필요 D-1~D-20 |
 | 설계 | 완료 | architect | docs/HANDOFF.md#1단계-설계 | |
 | ★승인1 | 완료 | 사용자 | | 승인 후 마일스톤·스테이지 이슈 생성 |
-| 디자인 명세 | 완료 (12절 사무실 방향만 승인 대기) | designer | DESIGN.md, docs/team/design-spec-stage1.md | |
-| 개발 | 대기 | developer | | |
+| 디자인 명세 | 완료 (승인됨) | designer | DESIGN.md, docs/team/design-spec-stage1.md | |
+| 개발 | 진행 | developer | | |
 | QA | 대기 | qa | | |
 | 보안 | 대기 | security | | |
 | 디자인 리뷰 | 대기 | designer | | |
