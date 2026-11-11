@@ -1,13 +1,13 @@
 {
   "files": {
     "agents/architect.md": "d06ebde41b4c9871f4f1c510e9d680048881345dad2cafc501124a4031f17221",
-    "agents/designer.md": "11aae9c1ba9b7cc3362ff0f982b0b4d4369873b35094589376b0e4cff4222029",
+    "agents/designer.md": "d31c5a5da0b7f0b43586994380ac7c4b2282195f09069fd3e199caa4ec711cdd",
     "agents/developer.md": "b62fbef201f2062f13e944a43ac500fe6cc52253a5d42829fe565ef937c0a251",
     "agents/devops.md": "fb0e01d262305bb34f983887bf28e9df1bd7fdcd7ef929da22fcc524abe8fb66",
     "agents/planner.md": "8f650e0c4924544ed72aa38343833e363add6e48455aa78fef3bb39b631c6657",
     "agents/qa.md": "1f02ec441b1008054cf9f1ea99315425a035956b33ffbc67800d01b23566440c",
     "agents/security.md": "cc354af5dba1263152c04ba5af558275a30d1856ca394b28bee78d979a0c199c",
-    "commands/task.md": "636e48e38d87297d77815d289ee61b2c3b37d61f8a874c9ac4b1d6031594a1d0",
+    "commands/task.md": "29844d2abe100170d709c61825f7c165ce7e33534dd69e7b62d3b74e19903b68",
     "commands/team-init.md": "6e68f242bbce15bee9648da2135a682856fe4a2d3860369e20c43f01229c678a",
     "team/checklists/release-docker.md": "562e481ba26fb4efd63ee85433ef0090131696305ecd64ee53ac984de5205846",
     "team/checklists/release-electron-builder.md": "d011c9d76b868f0b4c7bf4be7294a3f898d2881287ce21a9a939fe14d99ffaa9",
@@ -17,7 +17,7 @@
     "team/checklists/security-node-cli.md": "680da2daa13b3602165ce1c0ae9df893e968415a1775ea9175f8808258093008",
     "team/checklists/security-web.md": "fc4eb5eadacd11209787942969e3bfcccfe3acfd42e9585031ceb5a9c73b2dde",
     "team/observe/observe.mjs": "1ba7e501de757446ff9b75f2487f2ba46230a4eeddd2392faa925adc74b4acd1",
-    "team/process.md": "8d310da72e2510042dc1b7116ced975b07679e5bf8b5550c7a1e28cfee4c084b",
+    "team/process.md": "b2e620e152f4f109953177c523e487084f106014f88b97e6ba298f984c0046d5",
     "team/profile.template.md": "050e2c9ffd7cc25f8a47d00a55225f9881d77a5009a798aafe54f9f7921329ba",
     "team/templates/DESIGN.md": "03d5a40eb791cfb509849575236de5c6e47a195683d633a7048b130089a759f6",
     "team/templates/status.md": "b379abd3b35cd5dfac456877f4f2925568e5cd5be5fa5ec803837769c88fbc2a"
