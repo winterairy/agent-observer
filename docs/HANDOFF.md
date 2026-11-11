@@ -608,13 +608,14 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 { "session": { "...목록 항목과 같은 필드": "", "model": "…", "endedByEvent": false },
   "agents": [{
     "agentKey": "__lead__", "agentId": null, "agentType": null, "role": "lead", "displayName": "책임자",
-    "characterId": "lead", "status": "working", "currentTool": "Bash", "lastEventAt": "…",
+    "characterId": "lead", "status": "working", "currentTool": "Bash", "waitingSince": null, "stale": false, "lastEventAt": "…",
     "usage": {"input":6,"output":398,"cache_creation":12285,"cache_read":100229,"model":"claude-haiku-5-5","messages":3},
     "cost": {"usd":0.01234,"estimated":false,"pricingModel":"claude-haiku-5-5"},
     "skills": [{"skill":"playwright-cli","count":2,"lastAt":"…"}],
     "calledAgents": [{"subagentType":"qa","count":1}]
   }] }
 ```
+- 응답 최상위에 `"pricing": {"asOf": "…", "source": "…"}`를 함께 넣는다(세션 상세 화면의 단가 기준일 각주용).
 - 에이전트 정렬: lead 먼저, 나머지는 `firstSeenTs` 순. 종료된 에이전트도 목록에 남긴다(토큰 유지).
 
 #### POST /api/sessions/[key]/dismiss (쿠키)
