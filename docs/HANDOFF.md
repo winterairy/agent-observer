@@ -69,7 +69,7 @@ payload (v1):
 
 1. **수집 API** `POST /api/events`
    - Bearer 토큰 확인(환경 변수 `OBSERVER_TOKEN`), payload 검증(v1), 크기 제한
-   - 저장소는 인터페이스로 분리한다. 1단계 구현은 메모리 또는 로컬 파일. 나중에 Postgres·Redis 구현으로 바꿀 수 있게 한다.
+   - 저장소는 인터페이스로 분리한다. 1단계 구현은 로컬 파일(메모리 구현은 테스트용). 나중에 Postgres·Redis 구현으로 바꿀 수 있게 한다.
 2. **상태 계산**: 이벤트에서 세션·에이전트 상태를 만든다.
    - 상태: 작업 중(도구 사용), 생각 중, 승인 대기(Notification permission_prompt), 완료, 종료
    - 일정 시간 이벤트가 없으면 끝난 것으로 본다(프로세스 확인 대신)
@@ -112,7 +112,7 @@ payload (v1):
 ### 1단계 범위가 아닌 것
 
 - Vercel 배포, 실제 도메인·HTTPS 설정 (2단계)
-- DB 연결(Neon Postgres, Upstash Redis). 1단계는 메모리 또는 로컬 파일 저장만 한다 (2단계)
+- DB 연결(Neon Postgres, Upstash Redis). 1단계는 로컬 파일 저장만 한다 (2단계)
 - Electron 창(`desktop/`), 트레이, 데스크톱 알림, 휴대폰 푸시 알림 (2단계)
 - 진짜 사무실 그림, 사무실 좌표·이동 영역 데이터, 캐릭터 길찾기 (3단계). 1단계는 단색 사각형 등 임시 그림
 - 여러 사용자 계정, 권한 구분, 회원가입
@@ -139,13 +139,15 @@ payload (v1):
 - 검증: `v`가 1, `event`가 정의된 10종 중 하나, `ts`가 ISO 8601, `session_id`가 비어 있지 않은 문자열, `project`가 문자열. 나머지 필드는 선택이며 타입이 맞지 않으면 거부한다.
 - 정의되지 않은 필드는 저장하지 않고 버린다. 특히 프롬프트·응답·도구 입력으로 보이는 필드(`prompt`, `tool_input`, `tool_response` 등)가 와도 저장하지 않는다.
 - 요청 본문 크기 제한: 기본 16KB (결정 필요 D-1). 문자열 필드 길이 제한: 기본 256자 (결정 필요 D-2).
-- 저장소는 인터페이스로 분리하고 1단계 구현은 메모리 또는 로컬 파일 하나 (결정 필요 D-3). 로컬 파일이면 저장 위치는 gitignore된 폴더.
+- 저장소는 인터페이스로 분리하고 1단계 구현은 로컬 파일이고, 메모리 구현은 테스트용으로 둔다 (D-3). 저장 위치는 gitignore된 폴더.
 - 이벤트 보관 한도: 세션당 최근 이벤트 기본 500개, 전체 기본 7일 (결정 필요 D-4). 토큰 합계는 보관 한도와 별개로 유지한다.
 
 수용 기준
 - [ ] 올바른 토큰과 올바른 payload를 보내면 2xx가 오고 이벤트가 저장된다.
 - [ ] Authorization 헤더가 없거나 토큰이 다르면 401이 오고 아무것도 저장되지 않는다.
-- [ ] `OBSERVER_TOKEN`이 비어 있으면 어떤 토큰으로 보내도 401(또는 503)이 온다.
+- [ ] 서버의 `OBSERVER_TOKEN`이 비어 있거나 16자보다 짧으면 어떤 토큰으로 보내도 401이 오고, 응답에 "서버 수집 토큰이 설정되지 않았거나 16자보다 짧다"는 오류 메시지(`error: "server_token_invalid"`)가 있다. 토큰 값은 응답·로그에 나오지 않는다.
+- [ ] 보낸 토큰이 틀린 경우는 `error: "unauthorized"`로만 답하고 이유를 구분하지 않는다.
+- [ ] `ts`가 서버 시각보다 5분 넘게 미래이면 서버 시각으로 바뀌어 저장된다.
 - [ ] `v`가 1이 아니거나, `event`가 목록에 없거나, `ts`·`session_id`가 없거나 형식이 틀리면 400이 오고 저장되지 않는다.
 - [ ] JSON이 아닌 본문은 400이 온다.
 - [ ] 본문이 크기 제한을 넘으면 413이 오고 저장되지 않는다.
@@ -244,7 +246,7 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 
 요구사항
 - 환경 변수 비밀번호(기본 이름 `OBSERVER_PASSWORD`) 하나로 로그인한다. 사용자 이름은 없다 (결정 필요 D-13).
-- 로그인하면 쿠키를 받고, 쿠키가 있어야 웹 화면과 조회 API에 접근한다. 수집 API는 쿠키가 아니라 Bearer 토큰만 쓴다.
+- 로그인한 사용자만 모든 기능을 쓸 수 있다. 공개되는 것은 로그인 화면과 로그인 API, 수집 API(Bearer 토큰)뿐이다. 웹 화면, 조회 API, 정리, 캐릭터 설정 조회와 캐릭터 그림은 모두 쿠키가 있어야 한다. 수집 API는 쿠키가 아니라 Bearer 토큰만 쓴다.
 - 쿠키는 HttpOnly, SameSite=Lax, 서버가 위조를 알아챌 수 있는 값(서명 등). 유효 기간 기본 30일 (결정 필요 D-14). 로컬 http에서도 동작해야 하므로 Secure는 https일 때만 (가정).
 - 로그아웃하면 쿠키가 지워진다.
 - 비밀번호가 설정되지 않았으면 로그인할 수 없다(열린 상태로 시작하지 않는다).
@@ -253,13 +255,16 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 수용 기준
 - [ ] 로그인하지 않고 웹 화면에 접속하면 로그인 화면으로 이동한다.
 - [ ] 로그인하지 않고 조회 API를 부르면 401이 오고 데이터가 없다.
+- [ ] 로그인하지 않고 `/api/characters`, 캐릭터 그림 주소, 정리 API를 부르면 401이 온다. 캐릭터 그림은 `public/` 같은 정적 경로로도 받을 수 없다.
 - [ ] 틀린 비밀번호는 실패 메시지가 나오고 쿠키가 생기지 않는다.
 - [ ] 맞는 비밀번호로 로그인하면 화면과 조회 API가 열린다.
 - [ ] 쿠키 값을 임의로 바꾸면 로그인 안 된 상태로 처리된다.
 - [ ] 로그아웃 후 조회 API가 다시 401이다.
 - [ ] `OBSERVER_PASSWORD`가 비어 있으면 어떤 비밀번호로도 로그인되지 않는다.
 - [ ] Bearer 토큰으로 조회 API를 불러도 열리지 않는다(쿠키와 토큰의 역할이 섞이지 않는다) (결정 필요 D-16).
-- [ ] 1분 안에 6번째 실패 시도는 거부된다.
+- [ ] 1분 안에 6번째 실패 시도는 거부된다(429).
+- [ ] IP와 관계없이 전체 실패가 1분에 20회를 넘으면 거부된다.
+- [ ] 로그인·정리 등 쿠키로 상태를 바꾸는 POST 요청은 `Origin`이 다른 호스트면 거부된다(403).
 - [ ] 휴대폰 브라우저에서 로그인이 유지된다 `[사용자 확인]`
 
 ### T1-5. 조회 API와 웹 화면
@@ -299,8 +304,8 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 - `roles.json`: 역할 키(`lead`, `planner`, `architect`, `designer`, `developer`, `qa`, `security`, `devops`) → 표시 이름, 캐릭터 ID. 저장소에는 예시(`roles.example.json` 등)만 커밋한다.
 - 역할 매핑: `agent_type`이 null이면 `lead`. 플러그인 접두사(예: `plugin:planner`)는 접두사를 떼고 찾는다(`vendor/pixel-agent-desk/src/roleConfig.js` 참고). 매핑에 없는 역할은 기본 캐릭터와 `agent_type` 원문 이름으로 보인다.
 - 캐릭터 설정 파일(캐릭터마다): 그림 파일, 한 칸 크기(가로·세로), 줄별 방향·동작, 동작별 프레임 수(그리고 재생 속도, Should).
-- 없는 동작은 정해진 대체 순서로 바꾼다. 예: sit_work → idle, walk 방향 없음 → 다른 방향 → idle. 대체 순서표 (결정 필요 D-19).
-- 그림 파일과 실제 설정은 gitignore된 폴더(`characters/`, `public/characters/*`)에 둔다. 예시 설정만 커밋한다.
+- 없는 동작은 정해진 대체 순서로 바꾼다. 대체 순서(D-19): 같은 동작의 요청 방향 → 같은 동작의 down 방향 → 동작 체인(`sit_work → sit → idle`, `walk → idle`, 그 외 → `idle`)의 각 동작에 같은 방향 규칙. 끝까지 없으면 임시 사각형.
+- 그림 파일과 실제 설정은 gitignore된 `characters/` 폴더에 두고, 로그인한 사용자에게만 인증된 API로 보낸다. `public/`에는 두지 않는다(Next가 인증 없이 공개함). 예시 설정만 커밋한다.
 - 설정 파일이 없거나 잘못되면 화면이 깨지지 않고 임시 사각형으로 보이며, 원인이 서버 로그에 남는다.
 - 설정 변경 반영: 서버 재시작 없이 새로고침으로 반영 (결정 필요 D-20, 기본: 재시작 필요해도 허용).
 
@@ -316,7 +321,7 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 
 요구사항
 - 단위·API 테스트: T1-1 수용 기준(인증, 검증, 크기 제한, 미저장 필드), T1-2 시나리오 S-01~S-14, T1-3 토큰 누적 규칙과 비용, T1-4 로그인, T1-6 매핑과 동작 대체.
-- 통합 테스트 1개: 로컬 서버를 띄우고 dev-team-kit의 `kit/team/observe/observe.mjs`에 hook 입력을 넣어 실제로 전송한 뒤, 조회 API에서 세션·상태·토큰이 보이는지 확인한다. observe.mjs를 가져오는 방법은 설계에서 정한다.
+- 통합 테스트 1개: 로컬 서버를 띄우고 이 저장소에 설치된 `.claude/team/observe/observe.mjs`(dev-team-kit의 `kit/team/observe/observe.mjs`를 설치한 것)에 hook 입력을 넣어 실제로 전송한 뒤, 조회 API에서 세션·상태·토큰이 보이는지 확인한다.
 - 화면 확인: Playwright로 로그인 → 목록 → 상세 흐름 1개, 390·1280 스크린샷.
 - 테스트는 실제 토큰·비밀번호·수집 데이터를 커밋하지 않는다(테스트용 값은 테스트 안에서 만든다).
 
@@ -324,15 +329,15 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 - [ ] 테스트 명령 하나로 단위·API 테스트가 모두 돌고 통과한다.
 - [ ] 통합 테스트에서 observe.mjs로 SessionStart → PreToolUse → PostToolUse(usage 포함) → Stop을 보내면 조회 API에 해당 세션이 완료 상태, 토큰 값이 보낸 usage와 같게 나온다.
 - [ ] 통합 테스트에서 틀린 토큰으로 보내면 세션이 생기지 않는다.
-- [ ] Playwright 흐름 테스트가 통과하고 스크린샷 2장이 보고서 폴더에 남는다.
+- [ ] Playwright 흐름 테스트가 통과하고 스크린샷 2장이 `docs/team/reports/screens/qa/`에 남는다.
 - [ ] 저장소에 `.env` 파일이나 실제 토큰 값이 없다.
-- [ ] 실제 Claude Code 세션(로컬·클라우드)에서 hook으로 보낸 이벤트가 화면에 보인다 `[사용자 확인]`
+- [ ] 실제 로컬 Claude Code 세션에서 hook으로 보낸 이벤트가 화면에 보인다 `[사용자 확인]` (클라우드 세션 확인은 2단계 배포 후)
 
 ### 가정
 
 - 사용자는 한 명이다. 여러 사람이 각자 데이터를 보는 기능은 없다.
 - 1단계 서버는 로컬(127.0.0.1)에서 돈다. 클라우드 세션이 로컬 서버로 보내는 경로(터널 등)는 1단계 필수 범위가 아니다.
-- 서버 재시작 시 메모리 저장이면 데이터가 사라져도 된다(D-3에서 파일을 고르면 유지).
+- 서버를 재시작해도 데이터는 로컬 파일에 유지된다. 테스트용 메모리 저장소는 재시작하면 사라진다.
 - payload v1 필드는 위 "데이터 수집" 절이 기준이다. 새 필드가 생기면 버린다.
 
 ### 결정 필요
@@ -357,7 +362,7 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 | D-16 | 조회 API에 Bearer 토큰 허용 여부 | 허용하지 않음(쿠키만). 2단계 Electron에서 다시 검토 |
 | D-17 | 종료 세션 화면 표시 기간 | 24시간 |
 | D-18 | 화면 폴링 간격 | 3초 |
-| D-19 | 동작 대체 순서 | sit_work → sit → idle, walk_<방향> → walk_down → idle, 그 외 → idle |
+| D-19 | 동작 대체 순서 | 요청 방향 → down 방향 → 동작 체인(sit_work → sit → idle, walk → idle, 그 외 → idle) |
 | D-20 | 캐릭터 설정 변경 반영 | 새로고침으로 반영(Should), 재시작 필요해도 허용 |
 
 ## 1단계 설계
@@ -529,7 +534,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 ### 4. 인증
 
 수집(Bearer)
-- `/api/events`만. `OBSERVER_TOKEN`이 비었거나 16자 미만이면 모든 요청 401 + 서버 시작 시 경고 로그. 비교는 `crypto.timingSafeEqual`(길이가 다르면 바로 실패). 401 응답에 이유를 구분하지 않는다.
+- `/api/events`만. `OBSERVER_TOKEN`이 비었거나 16자 미만이면 모든 요청 401 `{"error":"server_token_invalid","message":"서버 수집 토큰(OBSERVER_TOKEN)이 설정되지 않았거나 16자보다 짧습니다"}` + 서버 시작 시 경고 로그. 보낸 토큰이 틀린 경우는 401 `{"error":"unauthorized"}`로만 답하고 이유를 구분하지 않는다. 비교는 `crypto.timingSafeEqual`(길이가 다르면 바로 실패).
 - 쿠키는 보지 않는다.
 
 화면·조회(비밀번호 + 서명 쿠키)
@@ -547,7 +552,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 | `/api/*` 나머지 | 쿠키 없거나 무효 → 401 JSON. Bearer 헤더는 무시(D-16) |
 | 그 외 화면 경로 | 쿠키 없거나 무효 → `/login?next=<경로>`로 302 (`next`는 `/`로 시작하는 내부 경로만 허용) |
 - 조회 route handler 안에서도 `requireSession(req)`를 한 번 더 부른다(proxy 설정 실수 대비 이중 방어).
-- 캐릭터 그림은 `public/`에 두지 않고 `characters/`(gitignore)에서 `GET /api/characters/[id]/image`로 보낸다 → 그림도 로그인 뒤에만 보인다. **변경 제안**: 기존 문서의 `public/characters/*`는 Next가 인증 없이 정적 제공하므로 1단계에서는 쓰지 않는다(.gitignore 항목은 그대로 둔다).
+- 캐릭터 그림은 `public/`에 두지 않고 `characters/`(gitignore)에서 `GET /api/characters/[id]/image`로 보낸다 → 그림도 로그인 뒤에만 보인다. `public/characters/*`는 Next가 인증 없이 정적 제공하므로 쓰지 않는다(사용자 결정 2026-11-11: 캐릭터 적용을 포함한 모든 기능은 로그인 후에만. .gitignore 항목은 실수 방지용으로 남긴다).
 
 ### 5. API 명세
 
@@ -560,7 +565,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 - 필수: `v === 1`, `event` 10종, `ts` ISO 8601(`Date.parse` 가능 + 정규식 `^\d{4}-\d{2}-\d{2}T`), `session_id` 1~256자, `project` 0~256자 문자열.
   - `project`가 빈 문자열이면 `"(unknown)"`으로 저장한다(observe.mjs는 git 없으면 폴더 이름을 넣으므로 드묾).
 - 선택(null 허용): `agent_id`, `agent_type`, `branch`, `remote_session_id`, `tool`, `skill`, `subagent_type`, `command`, `notification_type`, `source`, `model`, `reason`: 문자열 ≤256자(D-2). `remote`: boolean. `usage`: 객체, 네 항목·`messages`는 0 이상 정수(≤ 2^53), `model` 문자열|null. `subagent`: `{agent_id: 문자열 필수, agent_type, status: 문자열|null, usage: Usage}`.
-- `command`는 observe.mjs가 UserPromptExpansion에 넣는 필드(슬래시 명령 이름, 120자로 잘림)다. 위 payload 예시에 없지만 프롬프트 본문이 아니므로 허용 필드에 넣는다. **[확인 필요]** 저장하지 않기로 하면 허용 목록에서만 빼면 된다.
+- `command`는 observe.mjs가 UserPromptExpansion에 넣는 필드(슬래시 명령 이름, 120자로 잘림)다. 위 payload 예시에 없지만 허용 필드에 넣는다(사용자 결정 2026-11-11, 부작용 확인함). observe.mjs는 hook 입력의 `command_name`만 보내고 명령 인자(프롬프트 일부가 될 수 있음)는 보내지 않는다. 원본 이벤트에만 저장하고 상태 계산·합계에는 쓰지 않는다.
 - 그 외(`prompt`, `tool_input`, `tool_response`, `message` 등)는 모두 버린다. 저장·로그 어디에도 남기지 않는다(검증 실패 로그에도 값 대신 경로만).
 - `ts`가 서버 시각보다 5분 넘게 미래면 서버 시각으로 바꾼다(시간 초과 계산이 멈추는 것 방지).
 
@@ -569,7 +574,8 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 |---|---|---|
 | 202 | 저장됨 | `{"ok":true,"session":"UDEKMGMwOQ"}` |
 | 400 | JSON 아님, 검증 실패 | `{"error":"invalid_payload","message":"…","issues":["ts","usage.output"]}` (필드 경로만) |
-| 401 | 헤더 없음·토큰 틀림·`OBSERVER_TOKEN` 미설정 | `{"error":"unauthorized"}` |
+| 401 | 헤더 없음·토큰 틀림 | `{"error":"unauthorized"}` |
+| 401 | 서버 `OBSERVER_TOKEN` 미설정·16자 미만 | `{"error":"server_token_invalid","message":"…"}` |
 | 405 | POST 외 | `Allow: POST` 헤더 |
 | 413 | 16KB 초과 | `{"error":"payload_too_large"}` |
 | 500 | 저장 실패 | `{"error":"internal"}` |
@@ -728,7 +734,7 @@ observe.mjs 쪽(보내는 PC): `AGENT_OBSERVER_URL=http://127.0.0.1:3000`, `AGEN
 | 단위·API 테스트 | `pnpm test` = `vitest run` (`tests/unit`, `tests/api`. 서버 없이 route handler 직접 호출) |
 | 화면·통합 테스트 | `pnpm test:e2e` = `playwright test` (webServer가 `next build && next start -p 3100`을 테스트용 env로 띄움) |
 - E2E는 포트 3100(개발 서버 3000과 충돌 방지), `OBSERVER_STORE=file`, `OBSERVER_DATA_DIR=<임시 폴더>`, 테스트 안에서 만든 토큰·비밀번호를 webServer `env`로 넘긴다. `reuseExistingServer: false`.
-- 스크린샷(390·1280)은 `docs/team/reports/screenshots/`에 저장(실제 수집 데이터가 아니라 테스트 데이터만 보이므로 커밋 가능).
+- 스크린샷(390·1280)은 QA는 `docs/team/reports/screens/qa/`, 디자인 리뷰는 `docs/team/reports/screens/design/`에 저장(실제 수집 데이터가 아니라 테스트 데이터만 보이므로 커밋 가능).
 - profile.md "명령" 절은 구현 후 이 값으로 갱신한다.
 
 ### 14. observe.mjs 통합 테스트 (T1-7)
