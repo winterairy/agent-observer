@@ -89,7 +89,7 @@ payload (v1):
 
 ## 이후 단계 (이번 범위 아님)
 
-- 2단계: Vercel 배포, DB 연결(Neon Postgres 또는 Upstash Redis), Electron 창(`desktop/`)
+- 2단계: Vercel 배포, DB 연결(Neon Postgres 또는 Upstash Redis), Electron 창(`desktop/`), 휴대폰 푸시 알림(웹 푸시. 승인 대기가 생기면 휴대폰으로 알림)
 - 3단계: 캐릭터를 받은 뒤 사무실 그림 제작, 사무실 좌표·이동 영역을 데이터 파일로 정의
 
 ## 참고 코드
@@ -113,7 +113,7 @@ payload (v1):
 
 - Vercel 배포, 실제 도메인·HTTPS 설정 (2단계)
 - DB 연결(Neon Postgres, Upstash Redis). 1단계는 메모리 또는 로컬 파일 저장만 한다 (2단계)
-- Electron 창(`desktop/`), 트레이, 데스크톱 알림 (2단계)
+- Electron 창(`desktop/`), 트레이, 데스크톱 알림, 휴대폰 푸시 알림 (2단계)
 - 진짜 사무실 그림, 사무실 좌표·이동 영역 데이터, 캐릭터 길찾기 (3단계). 1단계는 단색 사각형 등 임시 그림
 - 여러 사용자 계정, 권한 구분, 회원가입
 - 프롬프트·응답·도구 입력 내용 표시(수집하지 않는다)
@@ -160,7 +160,11 @@ payload (v1):
 - 세션과 에이전트(메인 세션 = 책임자 `lead`, 서브에이전트 = `agent_id`별)마다 상태를 하나 가진다: 작업 중, 생각 중, 승인 대기, 완료, 종료.
 - 이벤트는 `agent_id`가 null이면 메인 세션(책임자)에, 아니면 그 서브에이전트에 적용한다.
 - 세션 상태는 그 세션 에이전트 상태 중 가장 활동적인 것으로 정한다. 우선순위: 승인 대기 > 작업 중 > 생각 중 > 완료 > 종료 (결정 필요 D-5).
-- 마지막 이벤트 후 일정 시간 이벤트가 없으면 종료로 본다. 기본값: 완료 상태에서 30분, 그 외 상태(작업 중·생각 중)에서 10분, 승인 대기는 시간 초과로 종료하지 않고 60분 (결정 필요 D-6). 종료 판정은 조회 시점 기준으로 계산해도 된다.
+- 마지막 이벤트 후 일정 시간 이벤트가 없으면 종료로 본다. 기본값: 완료 상태에서 30분, 작업 중·생각 중에서 10분 (D-6). 종료 판정은 조회 시점 기준으로 계산해도 된다.
+- **승인 대기는 시간이 지나도 종료로 보지 않는다.** Claude Code는 권한 프롬프트에서 사용자 답을 무기한 기다리므로 이벤트가 없는 것이 정상이다. 승인 대기는 다음 이벤트(승인·거절 후 PostToolUse 등) 또는 SessionEnd로만 풀린다.
+  - 승인 대기를 시작한 시각을 남겨 화면에 기다린 시간(예: "승인 대기 · 2시간째")을 보여 준다. permission_prompt 외 Notification(R6)은 이 시각을 바꾸지 않는다.
+  - 24시간 넘게 승인 대기이면 "승인 대기 (응답 없음)"으로 표시만 바꾼다(SessionEnd 없이 터미널이 꺼지거나 클라우드 컨테이너가 회수된 경우 대비). 상태와 데이터는 그대로이고 자동으로 지우지 않는다.
+  - 사용자는 화면에서 세션을 "정리"해 목록에서 숨길 수 있다. 숨긴 세션에 새 이벤트가 오면 다시 보인다.
 - 종료된 세션에 새 이벤트가 오면 다시 살아난다(표의 규칙대로 상태가 바뀐다).
 - 이벤트 순서: 도착 순서가 아니라 `ts` 순서로 계산한다. `ts`가 같으면 도착 순서 (결정 필요 D-7).
 - 상태와 함께 마지막 이벤트 시각, 현재 사용 중인 도구 이름(작업 중일 때)을 남긴다.
@@ -179,7 +183,8 @@ payload (v1):
 | R8 | SubagentStart | `agent_id` 있음 | 없음 | 해당 서브에이전트 생성, 생각 중 |
 | R9 | SubagentStop | `agent_id` 있음 | 모두 | 해당 서브에이전트 완료 |
 | R10 | SessionEnd | | 모두 | 세션과 모든 에이전트 종료 |
-| R11 | (시간 경과) | D-6 시간 초과 | 승인 대기 외 | 종료 |
+| R11 | (시간 경과) | D-6 시간 초과 | 작업 중·생각 중·완료 | 종료 |
+| R11a | (시간 경과) | 승인 대기 시작 후 24시간 초과 | 승인 대기 | 승인 대기 유지, "응답 없음" 표시 |
 | R12 | 처음 보는 `agent_id`의 아무 이벤트 | SubagentStart 없이 | 없음 | 서브에이전트를 만들고 그 이벤트 규칙 적용 |
 | R13 | 처음 보는 `session_id`의 아무 이벤트 | SessionStart 없이 | 없음 | 세션을 만들고 그 이벤트 규칙 적용 |
 
@@ -197,14 +202,16 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 | S-08 SessionEnd | 작업 중인 lead와 A1 → SessionEnd | 세션·lead·A1 모두 종료 |
 | S-09 시간 초과(작업 중) | PreToolUse 후 이벤트 없음 | 9분 59초: 작업 중, 10분 1초: 종료 |
 | S-10 시간 초과(완료) | Stop 후 이벤트 없음 | 29분: 완료, 31분: 종료 |
-| S-11 승인 대기 장기 | Notification(permission_prompt) 후 이벤트 없음 | 59분: 승인 대기, 61분: 종료 |
+| S-11 승인 대기 장기 | Notification(permission_prompt) 후 이벤트 없음 | 61분: 승인 대기, 23시간 59분: 승인 대기, 24시간 1분: 승인 대기(응답 없음). 어느 시점에도 종료가 아니다 |
+| S-11b 승인 대기 중 다른 알림 | Notification(permission_prompt) → 30분 뒤 Notification(idle_prompt) | 승인 대기 유지, 기다린 시간은 첫 알림 기준 |
+| S-11c 응답 없음 후 재개 | S-11의 24시간 1분 시점 → PostToolUse | 생각 중, "응답 없음" 표시 사라짐 |
 | S-12 종료 후 재개 | S-09로 종료 → UserPromptSubmit | lead 생각 중, 세션 다시 활성 |
 | S-13 순서 뒤바뀜 | ts 10:00:02 Stop이 먼저 도착, ts 10:00:01 PreToolUse가 나중에 도착 | lead 완료 (ts 순서 적용) |
 | S-14 프로젝트 구분 | 같은 이벤트를 project P1, P2로 각각 보냄 | 두 세션이 각 프로젝트에 따로 보인다 |
 
 수용 기준
-- [ ] 위 시나리오 S-01~S-14가 단위 테스트로 있고 모두 통과한다.
-- [ ] 위 전이표 R1~R13 각각을 최소 1개 테스트가 다룬다.
+- [ ] 위 시나리오 S-01~S-14(S-11b, S-11c 포함)가 단위 테스트로 있고 모두 통과한다.
+- [ ] 위 전이표 R1~R13(R11a 포함) 각각을 최소 1개 테스트가 다룬다.
 - [ ] 시간 초과 판정은 테스트에서 시각을 바꿔 검증할 수 있다(실제로 기다리지 않는다).
 - [ ] 같은 이벤트를 두 번 받아도 상태가 달라지지 않는다(예: PreToolUse 두 번 → 작업 중).
 
@@ -273,7 +280,9 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 - [ ] 이벤트를 보낸 뒤 3초(폴링 간격) + 1초 안에 화면에 상태 변화가 보인다.
 - [ ] 프로젝트 필터에서 P1을 고르면 P2 세션이 목록에서 사라진다.
 - [ ] S-05 시나리오를 보낸 뒤 세션 상세에 lead와 qa가 보이고 qa는 완료, 토큰이 남아 있다.
-- [ ] 승인 대기 BOT은 문구(예: "승인 대기")로 표시된다.
+- [ ] 승인 대기 BOT은 문구(예: "승인 대기")와 기다린 시간으로 표시되고, 승인 대기 세션이 목록 맨 위에 온다.
+- [ ] 24시간 넘은 승인 대기는 "승인 대기 (응답 없음)"으로 표시된다.
+- [ ] 세션을 "정리"하면 목록에서 사라지고, 그 세션에 새 이벤트가 오면 다시 보인다.
 - [ ] 역할별 합계 화면 값이 조회 API 값과 같다.
 - [ ] 비용은 "API 환산 비용"이라는 이름으로 표시되고, 실제 청구액이 아니라는 안내(툴팁이나 각주)와 단가표 기준일이 화면에 있다.
 - [ ] 단가 없는 모델은 "추정" 표시가 붙는다.
@@ -335,7 +344,7 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 | D-3 | 1단계 저장소 구현 | 메모리 + 선택적 로컬 파일(재시작 후 유지) 중 하나. 제안: 로컬 파일 |
 | D-4 | 이벤트 보관 한도 | 세션당 최근 500개, 7일. 토큰 합계·스킬 횟수는 유지 |
 | D-5 | 세션 상태 우선순위 | 승인 대기 > 작업 중 > 생각 중 > 완료 > 종료 |
-| D-6 | 이벤트 없을 때 종료 판정 시간 | 작업 중·생각 중 10분, 완료 30분, 승인 대기 60분 |
+| D-6 | 이벤트 없을 때 종료 판정 시간 | 작업 중·생각 중 10분, 완료 30분. 승인 대기는 종료하지 않고 24시간 뒤 "응답 없음" 표시 (사용자 결정 2026-11-11) |
 | D-7 | 이벤트 순서 기준 | `ts` 순, 같으면 도착 순 |
 | D-8 | SessionStart 직후 상태 | 완료(입력 대기). 별도 "대기" 상태를 두지 않는다 |
 | D-9 | permission_prompt 외 Notification 처리 | 상태 변화 없음(마지막 이벤트 시각만 갱신) |
@@ -449,6 +458,7 @@ interface AgentState {
   agentType: string | null;        // 원문. 역할 키는 조회 시 roles.ts로 계산
   status: AgentStatus;             // 저장된 상태(시간 초과 미반영)
   currentTool: string | null;      // working일 때만
+  waitingSinceTs: number | null;   // waiting으로 바뀐 시각. waiting이 아니면 null. R6은 바꾸지 않음
   lastEventTs: number;             // 상태 전이에 반영된 마지막 ts (ms)
   lastSeq: number;
   usage: Usage;                    // 누적, 항목별 max
@@ -461,6 +471,7 @@ interface SessionState {
   remote: boolean; remoteSessionId: string | null;
   model: string | null;            // SessionStart.model
   ended: boolean;                  // SessionEnd(R10) 받음. 이후 이벤트가 오면 false로 (S-12)
+  dismissedAtTs: number | null;    // 사용자가 "정리"한 시각. 이후 이벤트가 오면 null로
   lastEventTs: number;             // 세션 내 최대 ts
   agents: Record<string, AgentState>;   // 키: agent_id 또는 '__lead__'
   skills: Record<string /*agentKey*/, Record<string /*skill*/, { count: number; lastTs: number }>>;
@@ -484,7 +495,7 @@ interface SkillUse { project: string; sessionKey: string; agentKey: string; role
 - R10 SessionEnd: 모든 에이전트 `ended`, `session.ended = true`. 이후 같은 세션에 이벤트가 오면 `ended=false`로 되돌리고 그 이벤트 규칙을 적용한다.
 - R6, D-9: 상태는 그대로, `lastEventTs`만 갱신(시간 초과 기준도 늘어난다).
 - 멱등성: 같은 PreToolUse 두 번 → 작업 중 그대로. 스킬 횟수는 중복 전송이면 두 번 센다(이벤트 ID가 payload에 없어 구분 불가 — 리스크 절).
-- **시간 초과(R11, D-6) [D-6 민감]**: 저장하지 않고 조회 시 `effectiveStatus(agent, now)`로 계산한다. `now - lastEventTs`가 working/thinking 10분, done 30분, waiting 60분을 넘으면 `ended`. 경계는 "초과"(정확히 10분은 아직 작업 중). 세션 상태는 `effectiveStatus`들 중 D-5 우선순위 최대값.
+- **시간 초과(R11, D-6) [D-6 민감]**: 저장하지 않고 조회 시 `effectiveStatus(agent, now)`로 계산한다. `now - lastEventTs`가 working/thinking 10분, done 30분을 넘으면 `ended`. 경계는 "초과"(정확히 10분은 아직 작업 중). **waiting은 시간 초과로 ended가 되지 않는다.** 대신 `now - waitingSinceTs`가 24시간을 넘으면 DTO에 `stale: true`("승인 대기 (응답 없음)")를 붙인다. 세션 상태는 `effectiveStatus`들 중 D-5 우선순위 최대값.
 - usage 병합: `mergeUsage(old, new)` = 네 항목·messages 각각 `max`, `model`은 새 값이 null이 아니면 새 값(D-12). 대상:
   - 이벤트의 `usage` → 이벤트의 대상 에이전트.
   - `subagent.usage` → `subagent.agent_id` 에이전트(없으면 `subagent.agent_type`으로 생성, 상태는 바꾸지 않음). 부모(lead) usage에는 더하지 않는다.
@@ -500,6 +511,7 @@ interface Store {
   listSessions(filter?: { project?: string; sinceTs?: number }): Promise<SessionState[]>;
   listProjects(): Promise<string[]>;
   recentEvents(key: string, limit: number): Promise<NormalizedEvent[]>;   // 디버그용, API로 노출 안 함
+  dismiss(key: string, now: number): Promise<void>;   // "정리": dismissedAtTs 기록. reducer는 새 이벤트에서 null로 되돌림
   prune(now: number): Promise<void>;     // D-4: 세션당 500개, 7일 지난 이벤트 삭제(스냅숏은 유지)
 }
 ```
@@ -573,12 +585,12 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 
 #### GET /api/sessions?project=<이름>&ended=<recent|none|all> (쿠키)
 - `ended` 기본 `recent` = 종료 세션은 마지막 이벤트가 24시간 안인 것만(D-17).
-- 정렬: 활성 세션(effective 상태 ≠ 종료) 먼저, 그 안에서 `lastEventTs` 내림차순.
+- 정렬: 승인 대기 세션 먼저(기다린 시간이 긴 순), 그다음 다른 활성 세션, 그 안에서 `lastEventTs` 내림차순. `dismissedAtTs`가 있는 세션은 `ended=all`일 때만 포함.
 ```json
 { "now": "2026-11-11T10:00:03Z",
   "sessions": [{
     "key": "UDEKMGMwOQ", "sessionId": "0c09…", "project": "P1", "branch": "main", "remote": true,
-    "status": "waiting", "lastEventAt": "2026-11-11T10:00:01Z",
+    "status": "waiting", "waitingSince": "2026-11-11T08:00:01Z", "stale": false, "lastEventAt": "2026-11-11T10:00:01Z",
     "agentCount": 2, "waitingCount": 1,
     "totals": {"input":6,"output":398,"cache_creation":12285,"cache_read":100229,"costUsd":0.0123,"estimated":false}
   }] }
@@ -598,6 +610,9 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
   }] }
 ```
 - 에이전트 정렬: lead 먼저, 나머지는 `firstSeenTs` 순. 종료된 에이전트도 목록에 남긴다(토큰 유지).
+
+#### POST /api/sessions/[key]/dismiss (쿠키)
+"정리" 버튼. 204, 없는 키는 404. 쿠키는 SameSite=Lax라 다른 사이트에서의 POST에는 실리지 않지만, `Origin` 헤더가 같은 호스트인지도 확인한다(로그인 API도 같은 검사).
 
 #### GET /api/summary?project=<이름> (쿠키)
 ```json
@@ -669,7 +684,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 |---|---|---|---|
 | A1 | 스냅숏 + reducer, 이벤트는 보관용 | 저장된 이벤트를 조회 때마다 재생 | D-4로 이벤트가 지워져도 토큰·스킬이 남아야 함. 재생은 보관 한도와 충돌 |
 | A2 | 늦게 온 이벤트는 전이 생략(ts·seq 비교) | 세션 이벤트 전체를 ts로 정렬해 재계산 | S-13을 만족하면서 단순. DB 이식 시에도 행 하나 갱신 |
-| A3 | 시간 초과는 조회 시 계산 | 타이머·주기 작업으로 상태 저장 | Vercel 서버리스에 상주 타이머 없음. 테스트에서 `now` 주입 |
+| A3 | 시간 초과·응답 없음 표시는 조회 시 계산 | 타이머·주기 작업으로 상태 저장 | Vercel 서버리스에 상주 타이머 없음. 테스트에서 `now` 주입 |
 | A4 | 파일 저장소는 JSON 한 파일 + 메모리 캐시 + 원자적 rename | SQLite(better-sqlite3), JSONL 추가 쓰기 | 네이티브 의존성 없음. 1단계 데이터 규모 작음. 2단계에 DB로 교체 예정 |
 | A5 | 쿠키는 무상태 HMAC 서명 | iron-session·next-auth, 서버 세션 저장 | 사용자 1명·비밀번호 하나. 의존성 0, proxy 런타임에서 Web Crypto로 동작 |
 | A6 | 검증은 zod | 손으로 쓴 검증, valibot, ajv | 타입 추론으로 NormalizedEvent와 스키마를 하나로 유지, strip 기본. 서버에서만 쓰므로 크기 부담 없음 |
@@ -686,7 +701,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 | `OBSERVER_STORE` | 아니오 | `file` | `file` \| `memory` |
 | `OBSERVER_DATA_DIR` | 아니오 | `./.data` | 파일 저장소 폴더 |
 | `OBSERVER_CHARACTERS_DIR` | 아니오 | `./characters` | 역할·캐릭터 설정 폴더 |
-상수(환경 변수 아님, `src/config.ts` 한곳): 본문 16KB, 문자열 256자, 이벤트 500개/7일, 시간 초과 10/30/60분, 쿠키 30일, 실패 5회/분, 종료 세션 24시간, 폴링 3초.
+상수(환경 변수 아님, `src/config.ts` 한곳): 본문 16KB, 문자열 256자, 이벤트 500개/7일, 시간 초과 10/30분, 승인 대기 응답 없음 24시간, 쿠키 30일, 실패 5회/분, 종료 세션 24시간, 폴링 3초.
 observe.mjs 쪽(보내는 PC): `AGENT_OBSERVER_URL=http://127.0.0.1:3000`, `AGENT_OBSERVER_TOKEN=<OBSERVER_TOKEN과 같은 값>`.
 
 ### 12. 의존성
