@@ -16,3 +16,10 @@ coverage/
 characters/
 public/characters/*
 !public/characters/README.md
+
+# 파일 저장소 데이터 (실제 수집 데이터는 커밋하지 않는다)
+.data/
+
+# Next.js
+next-env.d.ts
+*.tsbuildinfo
