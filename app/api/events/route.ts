@@ -6,44 +6,11 @@
 import { checkBearer, SERVER_TOKEN_INVALID_MESSAGE } from '@/auth/token';
 import { ingest } from '@/collect/ingest';
 import { config } from '@/config';
+import { json, methodNotAllowed as notAllowed, readLimited, TooLarge } from '@/http/response';
 import { getStore } from '@/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function json(status: number, body: unknown, headers?: Record<string, string>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
-  });
-}
-
-class TooLarge extends Error {}
-
-/** 본문을 최대 max 바이트까지만 읽는다. 넘으면 TooLarge */
-async function readLimited(req: Request, max: number): Promise<Uint8Array> {
-  if (!req.body) return new Uint8Array();
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > max) {
-      await reader.cancel().catch(() => undefined);
-      throw new TooLarge();
-    }
-    chunks.push(value);
-  }
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.byteLength;
-  }
-  return out;
-}
 
 export async function POST(req: Request): Promise<Response> {
   const auth = checkBearer(req.headers.get('authorization'), process.env.OBSERVER_TOKEN);
@@ -81,9 +48,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 }
 
-function methodNotAllowed(_req?: Request): Response {
-  return json(405, { error: 'method_not_allowed', message: 'POST만 허용합니다' }, { Allow: 'POST' });
-}
+const methodNotAllowed = notAllowed('POST');
 
 export const GET = methodNotAllowed;
 export const PUT = methodNotAllowed;

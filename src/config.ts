@@ -28,6 +28,12 @@ export const config = {
   minTokenLength: 16,
   /** D-14 로그인 쿠키 유효 기간 */
   cookieMaxAgeMs: 30 * DAY,
+  /** 로그인 쿠키 이름 */
+  cookieName: 'obs_session',
+  /** 로그인 요청 본문 크기 제한(바이트) */
+  loginMaxBodyBytes: 4 * 1024,
+  /** 로그인 실패 제한 윈도 */
+  loginWindowMs: MINUTE,
   /** D-15 IP별 로그인 실패 제한(1분) */
   loginFailuresPerMinute: 5,
   /** 전역 로그인 실패 제한(1분) */
