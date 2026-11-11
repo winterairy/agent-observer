@@ -269,7 +269,7 @@ BOT 목록 (h3 "BOT ({N})")
 
 ### 4.4 특수 상태
 - 승인 대기: WaitingBanner, 행 왼쪽 막대, StatusBadge 기다린 시간, 사무실 승인 대기 구역. 승인 대기 세션은 항상 목록 맨 위(API 정렬).
-- 승인 대기 (응답 없음, `stale: true`): 색을 waiting(앰버)에서 stale(빨강)으로, 아이콘을 원 → 삼각형으로, 문구를 "승인 대기 (응답 없음)"으로 셋 다 바꾼다. 정렬·정리 동작은 동일. 자동으로 사라지지 않으며 정리 버튼으로만 숨긴다.
+- 승인 대기 (응답 없음, `stale: true`): 색을 waiting(머스터드)에서 stale(진홍)으로, 아이콘을 원 → 삼각형으로, 문구를 "승인 대기 (응답 없음)"으로 셋 다 바꾼다. 정렬·정리 동작은 동일. 자동으로 사라지지 않으며 정리 버튼으로만 숨긴다.
 - 응답 없음 후 재개(S-11c): 다음 폴링에서 일반 상태 배지로 돌아간다(별도 알림 없음).
 - 단가 없는 모델: 비용 옆 EstimateTag "추정"(BOT 행, 세션 합계, 합계 표 모두. `estimated`가 true인 곳).
 - 정리한 세션에 새 이벤트: 다음 폴링에서 목록에 다시 나타난다(별도 표시 없음).
@@ -319,7 +319,7 @@ BOT 목록 (h3 "BOT ({N})")
 ## 7. 새 컴포넌트
 
 이 명세에서 쓰는 컴포넌트는 모두 DESIGN.md 6절에 정의했다(WaitingBanner, SessionRow, AgentRow, EstimateTag, Note, ErrorBar, SyncIndicator, OfficeFloor/OfficeAvatar 포함). 추가로 필요한 것: 탭(Tabs) — DESIGN.md에 없으므로 여기서 정의한다.
-- Tabs: 높이 36px(모바일 44px), 글자 small 600. 비선택 ink-muted, 선택 ink 600 + 아래 2px primary(잉크색) 막대. 탭 목록 아래 1px border. 호버 시 ink.
+- Tabs: 높이 36px(모바일 44px), 글자 small 600. 비선택 ink-muted, 선택 ink 600 + 아래 2px primary(테라코타) 막대. 탭 목록 아래 1px border. 호버 시 ink.
 
 ## 8. 화면에 보이지 않는 것(확인용)
 - 프롬프트·응답·도구 입력·명령 인자. UserPromptExpansion의 `command`도 화면에 쓰지 않는다(설계상 원본 이벤트에만 저장).
