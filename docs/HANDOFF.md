@@ -479,8 +479,10 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 
 ## 1단계 설계
 
-작성: architect, 2026-11-11. 전제: D-1~D-20은 모두 제안 기본값을 쓴다. 기본값을 바꾸면 설계가 크게 달라지는 항목에는 **[D-n 민감]** 표시를 붙였다.
+작성: architect, 2026-11-11. 개정: 2026-11-11 범위 변경(토큰·API 환산 비용 제외, 플랜 사용량 T1-8 추가)과 개발 2차에서 설계와 달라진 점을 반영했다. 전제: D-1~D-9, D-13~D-30은 모두 제안 기본값을 쓴다(D-10~D-12는 삭제됨). 기본값을 바꾸면 설계가 크게 달라지는 항목에는 **[D-n 민감]** 표시를 붙였다.
 고정 조건: Next.js(App Router) + TypeScript, pnpm, 로컬 실행만(Vercel·DB·Electron 없음), 단위 테스트 Vitest, E2E·통합 테스트 Playwright.
+
+개발 BOT이 이번 개정에서 볼 곳: **16절 "토큰·비용 코드 제거 대상"**(이미 구현된 코드에서 지울 것)과 **6절 "플랜 사용량"**(새로 만들 것). 나머지 절은 바뀐 부분만 고쳤다.
 
 ### 1. 디렉터리와 모듈 경계
 
@@ -494,59 +496,75 @@ app/
   api/projects/route.ts           # GET 조회 (T1-5)
   api/sessions/route.ts
   api/sessions/[key]/route.ts
-  api/summary/route.ts
+  api/sessions/[key]/dismiss/route.ts, restore/route.ts   # POST 정리·다시 표시 (쿠키)
   api/skills/route.ts
+  api/plan-usage/route.ts         # GET 플랜 사용량 조회 (쿠키, T1-8)
+  api/plan-usage/report/route.ts  # POST 플랜 사용량 수집 (Bearer, T1-8)
   api/characters/route.ts         # GET 역할·캐릭터 설정 (T1-6)
   api/characters/[id]/image/route.ts  # GET 캐릭터 그림(로그인 필요)
 proxy.ts                          # 인증 보호(Next 15는 middleware.ts. 아래 4절)
 src/
-  domain/      types.ts           # 이벤트·세션·에이전트·합계 타입 (외부 의존 없음)
+  domain/      types.ts           # 이벤트·세션·에이전트·플랜 사용량 타입 (외부 의존 없음)
   collect/     schema.ts          # payload v1 검증(zod) → NormalizedEvent
                ingest.ts          # 검증된 이벤트를 저장소에 적용하는 유스케이스
   state/       reducer.ts         # 순수 함수: applyEvent(session, event) → session
                status.ts          # 순수 함수: effectiveStatus(agent, now), sessionStatus(...)
-               usage.ts           # 순수 함수: mergeUsage(old, new)
-  cost/        pricing.ts         # 단가표(기준일·출처 주석), calcCost()
-  aggregate/   totals.ts          # 순수 함수: 역할·프로젝트·세션·전체 합계, 스킬 집계
+  aggregate/   totals.ts          # 순수 함수: 스킬 집계, 부른 BOT 목록 (토큰·비용 합계 없음)
+  plan/        schema.ts          # 플랜 사용량 수집 payload 검증(zod) → PlanReport (6절)
+               merge.ts           # 순수 함수: mergePlanUsage(prev, report, now) (D-27)
+               view.ts            # 순수 함수: planUsageView(state, now) → 정상/오래됨/만료/없음, 경고
   store/       Store.ts           # 저장소 인터페이스
+               core.ts            # memory·file 공통 메모리 상태, 뮤텍스
                memoryStore.ts     # 메모리 구현(테스트용)
                fileStore.ts       # 1단계 기본 구현(로컬 JSON 파일)
                index.ts           # getStore(): 환경 변수로 구현 선택, 프로세스당 1개
   auth/        token.ts           # Bearer 비교(상수 시간)
                cookie.ts          # 서명 쿠키 만들기·검증(Web Crypto HMAC)
                rateLimit.ts       # 로그인 실패 제한(메모리)
-  query/       views.ts           # 저장소 → 조회 API 응답(DTO) 변환, 시각 now 주입
-  characters/  roles.ts           # roles.json 읽기·역할 매핑
+               session.ts         # requireSession, checkSameOrigin, verifyPassword
+  http/        response.ts        # json·noContent·methodNotAllowed·readLimited(본문 크기 제한 읽기)
+  query/       views.ts           # 저장소 → 조회 API 응답(DTO) 변환, 시각 now·RoleResolver 주입
+               hide.ts            # 정리·다시 표시 공통 처리
+  characters/  roles.ts           # roles.json 읽기·역할 매핑 → RoleResolver 제공
                spriteConfig.ts    # 캐릭터 설정 검증, 동작 대체(resolveAction)
-  ui/          *.tsx              # 목록, 상세, 합계, 임시 사무실(canvas 또는 div)
+  ui/          *.tsx              # 목록, 상세, 플랜 사용량, 임시 사무실(div)
 config/
   roles.example.json              # 커밋함
   characters.example/             # 예시 캐릭터 설정(JSON) + 직접 만든 테스트 그림(원본 아님)
 characters/                       # 실제 설정·그림 (gitignore 됨)
-.data/                            # 파일 저장소 (gitignore에 추가해야 함)
+.data/                            # 파일 저장소 (gitignore 됨)
+.claude/team/observe/
+  observe.mjs                     # dev-team-kit 설치 사본(hook). 이 저장소에서 고치지 않는다
+  statusline.mjs                  # dev-team-kit 설치 사본(statusLine, T1-8). 이 저장소에서 고치지 않는다
 tests/unit/**.test.ts             # Vitest
 tests/api/**.test.ts              # Vitest: route handler를 직접 호출
-e2e/**.spec.ts                    # Playwright: 화면 흐름 + observe.mjs 통합
+tests/script/**.test.ts           # Vitest: statusline.mjs를 자식 프로세스로 실행(6.6절). vitest include에 추가
+e2e/**.spec.ts                    # Playwright: 화면 흐름 + observe.mjs·statusline.mjs 통합
 ```
 
 ```mermaid
 flowchart LR
-  OBS[observe.mjs] -- Bearer --> EV[api/events]
+  OBS[observe.mjs hook] -- Bearer --> EV[api/events]
+  SL[statusline.mjs] -- 분리된 자식 프로세스, Bearer --> PR[api/plan-usage/report]
   EV --> SCH[collect/schema] --> ING[collect/ingest]
-  ING --> RED[state/reducer 순수] 
+  ING --> RED[state/reducer 순수]
+  PR --> PSCH[plan/schema] --> PM[plan/merge 순수]
   ING <--> ST[(store 인터페이스)]
+  PM <--> ST
   ST --- FS[fileStore] & MS[memoryStore]
-  UI[app/page 폴링 3초] -- 쿠키 --> PX[proxy.ts] --> Q[api/sessions·summary·skills·...]
-  Q --> VW[query/views] --> STAT[state/status 순수] & AGG[aggregate/totals 순수] & COST[cost/pricing]
+  UI[app/page 폴링 3초] -- 쿠키 --> PX[proxy.ts] --> Q[api/sessions·skills·plan-usage·...]
+  Q --> VW[query/views] --> STAT[state/status 순수] & AGG[aggregate/totals 순수]
+  Q --> PV[plan/view 순수]
   VW <--> ST
   Q --> CH[characters/roles·spriteConfig]
 ```
 
 경계 규칙
-- `domain`, `state`, `cost`, `aggregate`, `characters/spriteConfig`의 대체 함수는 순수 함수다. Next.js·fs·Date.now를 직접 쓰지 않는다(시각은 인자 `now`로 받는다 → S-09~S-11을 기다리지 않고 테스트).
+- `domain`, `state`, `aggregate`, `plan/merge`, `plan/view`, `characters/spriteConfig`의 대체 함수는 순수 함수다. Next.js·fs·Date.now를 직접 쓰지 않는다(시각은 인자 `now`로 받는다 → S-09~S-11, 플랜 사용량 만료·오래됨을 기다리지 않고 테스트).
 - route handler는 얇게 둔다: 인증 → 검증 → 유스케이스 호출 → 응답. 저장소는 `getStore()`로만 얻는다.
 - 수집·상태 계산 코드는 `Store` 인터페이스만 안다(T1-1 "구현만 바꿔도 같은 동작"). API 테스트는 같은 테스트를 memoryStore와 fileStore(임시 폴더) 두 구현으로 돌린다.
-- `vendor/` 코드는 import하지 않는다. `pricing.ts`, `roles.ts`, 사무실 렌더러에 옮긴 부분은 파일 머리에 출처 주석을 달고 `THIRD_PARTY_NOTICES.md`에 적는다.
+- 역할 매핑은 `query/views.ts`가 `RoleResolver` 인자(`ViewContext.roles`)로 받는다. 기본값은 `null → lead("책임자")`, 그 외 원문, 캐릭터 없음. T1-6의 `characters/roles.ts`가 `roleKeyFor`로 `RoleResolver`를 만들어 조회 route가 넘긴다(개발 2차 반영).
+- `vendor/` 코드는 import하지 않는다. `roles.ts`, 사무실 렌더러에 옮긴 부분은 파일 머리에 출처 주석을 달고 `THIRD_PARTY_NOTICES.md`에 적는다.
 
 ### 2. 데이터 모델 (`src/domain/types.ts`)
 
@@ -554,17 +572,13 @@ flowchart LR
 type EventName = 'SessionStart'|'SessionEnd'|'UserPromptSubmit'|'UserPromptExpansion'|'PreToolUse'
   |'PostToolUse'|'Notification'|'Stop'|'SubagentStart'|'SubagentStop';
 
-interface Usage { input: number; output: number; cache_creation: number; cache_read: number;
-  model: string | null; messages: number }          // 정수 >= 0
-
 interface NormalizedEvent {                          // 검증 후 허용 필드만 남긴 것. 이것만 저장한다
   v: 1; event: EventName; ts: string /*ISO*/; tsMs: number; seq: number /*도착 순번, 저장소가 부여*/;
   session_id: string; agent_id: string | null; agent_type: string | null;
   project: string; branch: string | null; remote: boolean; remote_session_id: string | null;
   tool?: string; skill?: string | null; subagent_type?: string | null; command?: string | null;
   notification_type?: string | null; source?: string | null; model?: string | null; reason?: string | null;
-  usage?: Usage;
-  subagent?: { agent_id: string; agent_type: string | null; status: string | null; usage: Usage };
+  subagent?: { agent_id: string; agent_type: string | null; status: string | null };  // usage는 없다(D-21)
 }
 
 type AgentStatus = 'working' | 'thinking' | 'waiting' | 'done' | 'ended';
@@ -578,7 +592,6 @@ interface AgentState {
   waitingSinceTs: number | null;   // waiting으로 바뀐 시각. waiting이 아니면 null. R6은 바꾸지 않음
   lastEventTs: number;             // 상태 전이에 반영된 마지막 ts (ms)
   lastSeq: number;
-  usage: Usage;                    // 누적, 항목별 max
   firstSeenTs: number;
 }
 
@@ -596,27 +609,37 @@ interface SessionState {
   agentCalls: Record<string /*agentKey*/, Record<string /*subagent_type*/, number>>;  // Should
 }
 
-interface Totals { input: number; output: number; cache_creation: number; cache_read: number;
-  costUsd: number; estimated: boolean /*추정 단가가 하나라도 섞임*/ }
-interface RoleTotal extends Totals { role: string; agents: number }
-interface ProjectTotal extends Totals { project: string; sessions: number }
 interface SkillUse { project: string; sessionKey: string; agentKey: string; role: string; skill: string; count: number; lastTs: number }
+
+// 플랜 사용량(T1-8, 6절). 계정 단위 하나. 세션·프로젝트와 관계없다
+type PlanWindowName = 'five_hour' | 'seven_day';
+interface PlanWindowState {
+  usedPercentage: number;          // 0~100
+  resetsAtSec: number;             // Unix epoch 초(원문 단위 그대로)
+  receivedTs: number;              // 이 창이 마지막으로 보고된 서버 수신 시각(ms). D-27: 진 값이 와도 갱신
+  remote: boolean;                 // 저장된 값을 보낸 요청이 클라우드 세션이었는지
+}
+interface PlanUsageState { five_hour: PlanWindowState | null; seven_day: PlanWindowState | null }
+interface PlanReport {             // 검증된 수집 요청(plan/schema 결과)
+  remote: boolean;
+  windows: Partial<Record<PlanWindowName, { usedPercentage: number; resetsAtSec: number }>>;  // 1개 이상
+}
 ```
+- 토큰 관련 타입(`Usage`, `Totals`, `RoleTotal`, `ProjectTotal`, `AgentState.usage`, `emptyUsage`)은 없다(16절에서 지운다).
 
 - 세션 키: `sessionKey = base64url(project + "\n" + session_id)`. S-14가 "같은 이벤트를 P1·P2로 보냄"이므로 session_id만으로는 구분할 수 없다. URL에 그대로 쓸 수 있게 base64url로 만든다.
-- 스냅숏 방식: 세션 상태는 이벤트를 받을 때마다 `applyEvent`로 갱신해 저장한다. 원본 이벤트는 보관 한도(D-4)만큼 따로 남기고(디버그·향후 재계산용), 합계·스킬 횟수는 스냅숏에 있으므로 이벤트를 지워도 사라지지 않는다.
-- 버전: 저장 파일 최상위에 `schemaVersion: 1`. 읽을 때 버전이 다르면 서버 로그에 남기고 파일을 `state.json.bak-<시각>`으로 옮긴 뒤 빈 상태로 시작한다(1단계는 마이그레이션 코드 없음. 데이터 손실 허용 범위 — 가정 절 참고).
+- 스냅숏 방식: 세션 상태는 이벤트를 받을 때마다 `applyEvent`로 갱신해 저장한다. 원본 이벤트는 보관 한도(D-4)만큼 따로 남기고(디버그·향후 재계산용), 스킬 횟수·BOT 호출 기록은 스냅숏에 있으므로 이벤트를 지워도 사라지지 않는다.
+- 버전: 저장 파일 최상위에 `schemaVersion: 2`(개정 전 구현은 1). 마이그레이션은 3절 fileStore 참고. 알 수 없는 버전이거나 JSON이 깨졌으면 서버 로그에 남기고 파일을 `state.json.bak-<시각>`으로 옮긴 뒤 빈 상태로 시작한다(지금 구현 그대로).
 
 #### 상태 계산 규칙 (reducer)
 - 대상 에이전트: `agent_id`가 null이면 lead, 아니면 그 ID(R12: 없으면 생성, R13: 세션 없으면 생성). SubagentStart/Stop은 observe.mjs가 subagent의 `agent_id`를 넣어 보낸다.
-- **순서(D-7) [D-7 민감]**: 재생(replay) 대신 에이전트별 `(lastEventTs, lastSeq)` 비교로 처리한다. 이벤트의 `(tsMs, seq)`가 에이전트의 마지막 값보다 작으면 **상태 전이는 하지 않고** usage 병합·스킬 기록·`lastEventTs` 최대값 갱신만 한다. S-13(늦게 도착한 옛 PreToolUse)은 완료로 남는다. 늦게 온 이벤트가 끼어들어 중간 상태가 바뀌는 경우는 화면에 의미가 없어 무시한다. D-7을 "도착 순"으로 바꾸면 이 비교만 빼면 된다.
+- **순서(D-7) [D-7 민감]**: 재생(replay) 대신 에이전트별 `(lastEventTs, lastSeq)` 비교로 처리한다. 이벤트의 `(tsMs, seq)`가 에이전트의 마지막 값보다 작으면 **상태 전이는 하지 않고** 스킬·BOT 호출 기록과 `lastEventTs` 최대값 갱신만 한다. S-13(늦게 도착한 옛 PreToolUse)은 완료로 남는다. 늦게 온 이벤트가 끼어들어 중간 상태가 바뀌는 경우는 화면에 의미가 없어 무시한다. D-7을 "도착 순"으로 바꾸면 이 비교만 빼면 된다.
 - R10 SessionEnd: 모든 에이전트 `ended`, `session.ended = true`. 이후 같은 세션에 이벤트가 오면 `ended=false`로 되돌리고 그 이벤트 규칙을 적용한다.
 - R6, D-9: 상태는 그대로, `lastEventTs`만 갱신(시간 초과 기준도 늘어난다).
 - 멱등성: 같은 PreToolUse 두 번 → 작업 중 그대로. 스킬 횟수는 중복 전송이면 두 번 센다(이벤트 ID가 payload에 없어 구분 불가 — 리스크 절).
 - **시간 초과(R11, D-6) [D-6 민감]**: 저장하지 않고 조회 시 `effectiveStatus(agent, now)`로 계산한다. `now - lastEventTs`가 working/thinking 10분, done 30분을 넘으면 `ended`. 경계는 "초과"(정확히 10분은 아직 작업 중). **waiting은 시간 초과로 ended가 되지 않는다.** 대신 `now - waitingSinceTs`가 24시간을 넘으면 DTO에 `stale: true`("승인 대기 (응답 없음)")를 붙인다. 세션 상태는 `effectiveStatus`들 중 D-5 우선순위 최대값.
-- usage 병합: `mergeUsage(old, new)` = 네 항목·messages 각각 `max`, `model`은 새 값이 null이 아니면 새 값(D-12). 대상:
-  - 이벤트의 `usage` → 이벤트의 대상 에이전트.
-  - `subagent.usage` → `subagent.agent_id` 에이전트(없으면 `subagent.agent_type`으로 생성, 상태는 바꾸지 않음). 부모(lead) usage에는 더하지 않는다.
+- `usage`·`subagent.usage`는 검증 단계에서 버려지므로 reducer에 오지 않는다(D-21, 5절).
+- `subagent`(부모의 Agent 도구 PostToolUse): `subagent.agent_id` 에이전트가 없으면 `subagent.agent_type`으로 만들고 상태는 `done`(개발 1차 그대로), 있으면 `agentType`이 비었을 때만 채운다. 상태 전이는 하지 않는다.
 - 스킬: `event=PreToolUse && tool=Skill && skill` 일 때 `skills[agentKey][skill].count++`. `tool in (Agent, Task) && subagent_type` 이면 `agentCalls` 증가.
 
 ### 3. 저장소
@@ -632,14 +655,21 @@ interface Store {
   dismiss(key: string, now: number): Promise<void>;
   restore(key: string, now: number): Promise<void>;  // "다시 표시": dismissedAtTs를 null로, restoredAtTs = now   // "정리": dismissedAtTs 기록. reducer는 새 이벤트에서 null로 되돌림
   prune(now: number): Promise<void>;     // D-4: 세션당 500개, 7일 지난 이벤트 삭제(스냅숏은 유지)
+  // T1-8 추가(6.4절)
+  getPlanUsage(): Promise<PlanUsageState>;                     // 받은 적 없으면 {five_hour:null, seven_day:null}
+  applyPlanUsage(report: PlanReport, now: number,
+    fn: (prev: PlanUsageState, report: PlanReport, now: number) => PlanUsageState): Promise<PlanUsageState>;
 }
 ```
-- 합계는 저장하지 않고 조회 때 `aggregate/totals.ts`가 스냅숏에서 계산한다(1단계 규모: 세션 수백 개 이하). 2단계 DB 구현에서 느리면 그때 합계 테이블을 둔다.
+- 스킬 집계는 저장하지 않고 조회 때 `aggregate/totals.ts`가 스냅숏에서 계산한다(1단계 규모: 세션 수백 개 이하).
+- `applyPlanUsage`도 `applyEvent`처럼 "읽기-병합-쓰기"를 뮤텍스 안에서 한 번에 한다(여러 PC의 보고가 동시에 와도 D-27 규칙이 깨지지 않게). `fn`은 `plan/merge.ts`의 순수 함수.
 - `applyEvent`가 "읽기-계산-쓰기"를 한 번에 하게 한 이유: Redis(WATCH/Lua)·Postgres(트랜잭션, `SELECT … FOR UPDATE`)로 옮길 때 같은 경계를 그대로 쓸 수 있다.
 - 구현 선택: `OBSERVER_STORE=file`(기본) | `memory`.
 
 fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목 전부 불필요]**
-- 위치: `OBSERVER_DATA_DIR`(기본 `<프로젝트 루트>/.data`). 파일 `state.json` 하나: `{ schemaVersion, seq, sessions: {key: SessionState}, events: {key: NormalizedEvent[]} }`.
+- 위치: `OBSERVER_DATA_DIR`(기본 `<프로젝트 루트>/.data`). 파일 `state.json` 하나: `{ schemaVersion: 2, seq, sessions: {key: SessionState}, events: {key: NormalizedEvent[]}, planUsage: PlanUsageState }`.
+- 마이그레이션 v1 → v2(읽을 때 한 번, 메모리에서 바꾸고 다음 쓰기 때 저장): 모든 `sessions[*].agents[*].usage`, `events[*][*].usage`, `events[*][*].subagent.usage`를 지우고 `planUsage = {five_hour:null, seven_day:null}`을 넣는다. 개정 전 개발 서버 데이터를 잃지 않으면서 "저장된 데이터 어디에도 토큰 수가 없다"(T1-1)를 맞추기 위해서다. 서버 로그에 "schemaVersion 1 → 2 변환" 한 줄. 그 외 버전·깨진 JSON은 지금처럼 `.bak-<시각>`으로 옮긴다.
+  - 예전 `.bak-*` 파일과, 변환 후 첫 쓰기 전의 `.data/state.json`에는 토큰 값이 남아 있을 수 있다. 자동으로 지우지 않고 README에 "개정 전 `.data/`는 지워도 된다"고 적는다(gitignore라 커밋되지 않음).
 - `.gitignore`에 `.data/`를 추가한다(개발 BOT이 T1-1에서 함께 커밋).
 - 동시 쓰기: 1단계는 Next 서버 프로세스 하나라고 가정한다. 프로세스 안에서는 메모리에 전체 상태를 들고, 모든 `applyEvent`를 Promise 체인 뮤텍스로 직렬화한다. 디스크 쓰기는 250ms 디바운스로 모아 `state.json.tmp`에 쓰고 `rename`(같은 폴더라 원자적). 서버 시작 시 한 번 읽는다. `next dev`의 핫 리로드로 모듈이 다시 로드돼도 인스턴스가 하나가 되도록 `globalThis`에 보관한다.
 - 종료 직전 디바운스 중인 쓰기는 최대 250ms 분량을 잃을 수 있다(허용). `prune`은 쓰기 때마다 해당 세션에만, 전체는 시작 시와 1시간마다.
@@ -648,21 +678,23 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 ### 4. 인증
 
 수집(Bearer)
-- `/api/events`만. `OBSERVER_TOKEN`이 비었거나 16자 미만이면 모든 요청 401 `{"error":"server_token_invalid","message":"서버 수집 토큰(OBSERVER_TOKEN)이 설정되지 않았거나 16자보다 짧습니다"}` + 서버 시작 시 경고 로그. 보낸 토큰이 틀린 경우는 401 `{"error":"unauthorized"}`로만 답하고 이유를 구분하지 않는다. 비교는 `crypto.timingSafeEqual`(길이가 다르면 바로 실패).
+- `/api/events`와 `/api/plan-usage/report`(T1-8) 두 곳만. 같은 함수(`auth/token.ts`)를 쓴다. `OBSERVER_TOKEN`이 비었거나 16자 미만이면 모든 요청 401 `{"error":"server_token_invalid","message":"서버 수집 토큰(OBSERVER_TOKEN)이 설정되지 않았거나 16자보다 짧습니다"}` + 서버 시작 시 경고 로그. 보낸 토큰이 틀린 경우는 401 `{"error":"unauthorized"}`로만 답하고 이유를 구분하지 않는다. 비교는 `crypto.timingSafeEqual`(길이가 다르면 바로 실패).
 - 쿠키는 보지 않는다.
 
 화면·조회(비밀번호 + 서명 쿠키)
 - `POST /api/auth/login`이 `OBSERVER_PASSWORD`와 상수 시간 비교(양쪽을 SHA-256 한 뒤 비교해 길이 노출 방지). 비었으면 항상 401.
-- 쿠키 이름 `obs_session`, 값 `v1.<만료 epoch초>.<base64url HMAC-SHA256("v1."+만료)>`. 키는 `OBSERVER_SESSION_SECRET`(32자 이상 권장). 없으면 `HMAC(OBSERVER_PASSWORD, "agent-observer-cookie")`로 만든다 → 비밀번호를 바꾸면 기존 쿠키가 모두 무효가 된다. HttpOnly, SameSite=Lax, Path=/, Max-Age 30일(D-14), Secure는 요청이 https(`x-forwarded-proto` 또는 URL)일 때만.
+- 쿠키 이름 `obs_session`, 값 `v1.<만료 epoch초>.<base64url HMAC-SHA256("v1."+만료)>`. 키는 `OBSERVER_SESSION_SECRET`(32자 이상 권장). 없으면 `HMAC(OBSERVER_PASSWORD, "agent-observer-cookie")`로 만든다 → 비밀번호를 바꾸면 기존 쿠키가 모두 무효가 된다. **`OBSERVER_PASSWORD`가 비어 있으면 `OBSERVER_SESSION_SECRET`이 있어도 쿠키 검증은 항상 실패한다**(비밀번호를 지워 잠근 서버가 예전 쿠키로 열리지 않게. 개발 2차 반영). HttpOnly, SameSite=Lax, Path=/, Max-Age 30일(D-14), Secure는 요청이 https(`x-forwarded-proto` 또는 URL)일 때만.
 - 검증은 Web Crypto(`crypto.subtle`)로 해서 proxy/middleware 런타임과 무관하게 같은 코드를 쓴다.
 - 실패 제한(D-15): 메모리 슬라이딩 윈도. 키는 클라이언트 IP(`x-forwarded-for` 첫 값, 없으면 `"local"`) + 전역 카운터 하나. 1분 안 실패 5회 넘으면 429 + `Retry-After`. 성공 시 그 IP 카운터 초기화. 서버 재시작 시 초기화(허용).
-- 로그아웃: `POST /api/auth/logout` → 같은 이름 쿠키를 Max-Age=0으로. (서명 쿠키라 서버 쪽 무효화 목록은 없음 — 리스크 절)
+- 로그아웃: `POST /api/auth/logout` → 같은 이름 쿠키를 Max-Age=0으로. 쿠키가 없어도 204이므로 proxy 공개 경로다(쿠키를 지우기만 해서 공개해도 위험 없음. Origin 검사는 한다). (서명 쿠키라 서버 쪽 무효화 목록은 없음 — 리스크 절)
+- Origin 검사(`checkSameOrigin`, 쿠키로 상태를 바꾸는 POST 전부: 로그인, 로그아웃, 정리, 다시 표시): `Origin` 헤더의 host(포트 포함)를 요청의 `Host` 헤더와 비교해 다르면 403 `{"error":"forbidden_origin"}`. `Origin: null`이나 URL로 해석할 수 없는 값도 403. **`Origin` 헤더가 아예 없으면 통과**시킨다(브라우저는 POST에 Origin을 붙이므로 CSRF는 막히고, curl·테스트 같은 비브라우저 클라이언트는 쓸 수 있게. 개발 2차 반영). 이 규칙은 보안 검토 대상이다(15절).
+- 수집 API 두 곳은 Origin을 보지 않는다(Bearer만).
 
 보호 범위 (`proxy.ts`. Next 16에서는 `proxy.ts`, Next 15에서는 `middleware.ts`로 같은 내용. 설치한 버전에 맞춘다)
 | 경로 | 보호 |
 |---|---|
-| `/api/events` | proxy 통과, route에서 Bearer 검사 |
-| `/api/auth/login`, `/login`, `/_next/static/*`, `/_next/image/*`, `/favicon.ico` | 공개 |
+| `/api/events`, `/api/plan-usage/report` | proxy 통과, route에서 Bearer 검사(쿠키는 보지 않음) |
+| `/api/auth/login`, `/api/auth/logout`, `/login`, `/_next/static/*`, `/_next/image/*`, `/favicon.ico` | 공개 |
 | `/api/*` 나머지 | 쿠키 없거나 무효 → 401 JSON. Bearer 헤더는 무시(D-16) |
 | 그 외 화면 경로 | 쿠키 없거나 무효 → `/login?next=<경로>`로 302 (`next`는 `/`로 시작하는 내부 경로만 허용) |
 - 조회 route handler 안에서도 `requireSession(req)`를 한 번 더 부른다(proxy 설정 실수 대비 이중 방어).
@@ -678,7 +710,8 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 검증 규칙(zod, `strip` 모드 = 정의 안 된 키는 버림):
 - 필수: `v === 1`, `event` 10종, `ts` ISO 8601(`Date.parse` 가능 + 정규식 `^\d{4}-\d{2}-\d{2}T`), `session_id` 1~256자, `project` 0~256자 문자열.
   - `project`가 빈 문자열이면 `"(unknown)"`으로 저장한다(observe.mjs는 git 없으면 폴더 이름을 넣으므로 드묾).
-- 선택(null 허용): `agent_id`, `agent_type`, `branch`, `remote_session_id`, `tool`, `skill`, `subagent_type`, `command`, `notification_type`, `source`, `model`, `reason`: 문자열 ≤256자(D-2). `remote`: boolean. `usage`: 객체, 네 항목·`messages`는 0 이상 정수(≤ 2^53), `model` 문자열|null. `subagent`: `{agent_id: 문자열 필수, agent_type, status: 문자열|null, usage: Usage}`.
+- 선택(null 허용): `agent_id`, `agent_type`, `branch`, `remote_session_id`, `tool`, `skill`, `subagent_type`, `command`, `notification_type`, `source`, `model`, `reason`: 문자열 ≤256자(D-2). `remote`: boolean. `subagent`: `{agent_id: 문자열 필수, agent_type, status: 문자열|null}`.
+- **`usage`, `subagent.usage`는 스키마에 넣지 않는다(D-21).** strip 모드라 어떤 형식으로 와도 검사 없이 버려지고, 이 필드 때문에 400이 나지 않는다. 저장·로그·응답 어디에도 남지 않는다.
 - `command`는 observe.mjs가 UserPromptExpansion에 넣는 필드(슬래시 명령 이름, 120자로 잘림)다. 위 payload 예시에 없지만 허용 필드에 넣는다(사용자 결정 2026-11-11, 부작용 확인함). observe.mjs는 hook 입력의 `command_name`만 보내고 명령 인자(프롬프트 일부가 될 수 있음)는 보내지 않는다. 원본 이벤트에만 저장하고 상태 계산·합계에는 쓰지 않는다.
 - 그 외(`prompt`, `tool_input`, `tool_response`, `message` 등)는 모두 버린다. 저장·로그 어디에도 남기지 않는다(검증 실패 로그에도 값 대신 경로만).
 - `ts`가 서버 시각보다 5분 넘게 미래면 서버 시각으로 바꾼다(시간 초과 계산이 멈추는 것 방지).
@@ -687,7 +720,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 | 코드 | 경우 | 본문 예 |
 |---|---|---|
 | 202 | 저장됨 | `{"ok":true,"session":"UDEKMGMwOQ"}` |
-| 400 | JSON 아님, 검증 실패 | `{"error":"invalid_payload","message":"…","issues":["ts","usage.output"]}` (필드 경로만) |
+| 400 | JSON 아님, 검증 실패 | `{"error":"invalid_payload","message":"…","issues":["ts","subagent.agent_id"]}` (필드 경로만) |
 | 401 | 헤더 없음·토큰 틀림 | `{"error":"unauthorized"}` |
 | 401 | 서버 `OBSERVER_TOKEN` 미설정·16자 미만 | `{"error":"server_token_invalid","message":"…"}` |
 | 405 | POST 외 | `Allow: POST` 헤더 |
@@ -707,14 +740,15 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 - `ended` 기본 `recent` = 종료 세션은 `max(lastEventTs, restoredAtTs)`가 24시간 안인 것만(D-17). 다시 표시한 세션은 다시 표시한 때부터 24시간 보인다.
 - 응답 최상위에 `hiddenCount`(같은 project 필터 기준 숨긴 세션 수)를 넣는다. 화면은 이 값으로 "숨긴 세션 N개 보기"를 그리고, 펼쳤을 때만 `hidden=only`를 부른다.
 - `hidden=only`는 `project` 필터와 함께 쓸 수 있다.
-- 정렬: 승인 대기 세션 먼저(기다린 시간이 긴 순), 그다음 다른 활성 세션, 그 안에서 `lastEventTs` 내림차순. `dismissedAtTs`가 있는 세션은 `ended=all`일 때만 포함.
+- 정렬: 승인 대기 세션 먼저(기다린 시간이 긴 순), 그다음 다른 활성 세션(`lastEventTs` 내림차순), **종료 세션은 맨 뒤**(그 안에서 `lastEventTs` 내림차순. 개발 2차 반영). `dismissedAtTs`가 있는 세션은 `ended=all`일 때만 포함.
+- `ended`가 `recent|none|all` 밖이거나 `hidden`이 `only` 밖의 값이면 400 `{"error":"invalid_query"}`(개발 2차 반영).
+- 항목의 `dismissedAt`(ISO|null): `ended=all`에는 숨긴 세션도 섞이므로 화면이 구분할 수 있게 넣는다(개발 2차 반영).
 ```json
 { "now": "2026-11-11T10:00:03Z", "hiddenCount": 0,
   "sessions": [{
     "key": "UDEKMGMwOQ", "sessionId": "0c09…", "project": "P1", "branch": "main", "remote": true,
     "status": "waiting", "waitingSince": "2026-11-11T08:00:01Z", "stale": false, "lastEventAt": "2026-11-11T10:00:01Z",
-    "agentCount": 2, "waitingCount": 1,
-    "totals": {"input":6,"output":398,"cache_creation":12285,"cache_read":100229,"costUsd":0.0123,"estimated":false}
+    "dismissedAt": null, "agentCount": 2, "waitingCount": 1
   }] }
 ```
 
@@ -725,14 +759,13 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
   "agents": [{
     "agentKey": "__lead__", "agentId": null, "agentType": null, "role": "lead", "displayName": "책임자",
     "characterId": "lead", "status": "working", "currentTool": "Bash", "waitingSince": null, "stale": false, "lastEventAt": "…",
-    "usage": {"input":6,"output":398,"cache_creation":12285,"cache_read":100229,"model":"claude-haiku-5-5","messages":3},
-    "cost": {"usd":0.01234,"estimated":false,"pricingModel":"claude-haiku-5-5"},
     "skills": [{"skill":"playwright-cli","count":2,"lastAt":"…"}],
     "calledAgents": [{"subagentType":"qa","count":1}]
   }] }
 ```
-- 응답 최상위에 `"pricing": {"asOf": "…", "source": "…"}`를 함께 넣는다(세션 상세 화면의 단가 기준일 각주용).
-- 에이전트 정렬: lead 먼저, 나머지는 `firstSeenTs` 순. 종료된 에이전트도 목록에 남긴다(토큰 유지).
+- 응답 어디에도 `usage`, `cost`, `totals`, `pricing`이 없다(조회 API 공통).
+- `role`·`displayName`·`characterId`는 `RoleResolver`가 정한다. T1-6 전에는 lead만 "책임자", 나머지는 `agentType` 원문, `characterId` null.
+- 에이전트 정렬: lead 먼저, 나머지는 `firstSeenTs` 순. 종료된 에이전트도 목록에 남긴다(스킬 기록 유지). 에이전트 `skills`는 횟수 내림차순, 같으면 이름순.
 
 #### POST /api/sessions/[key]/dismiss (쿠키)
 "정리" 버튼. 204, 없는 키는 404. 쿠키는 SameSite=Lax라 다른 사이트에서의 POST에는 실리지 않지만, `Origin` 헤더가 같은 호스트인지도 확인한다(로그인 API도 같은 검사).
@@ -740,17 +773,14 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 #### POST /api/sessions/[key]/restore (쿠키)
 "다시 표시" 버튼. 204, 없는 키는 404. Origin 검사는 dismiss와 같다. 숨긴 세션 목록은 `GET /api/sessions?hidden=only`(숨긴 세션만, 종료 세션 24시간 제한을 적용하지 않음).
 
-#### GET /api/summary?project=<이름> (쿠키)
-```json
-{ "total": {"…Totals"},
-  "byRole": [{"role":"qa","displayName":"QA","agents":2,"input":0,"output":300,"cache_creation":0,"cache_read":0,"costUsd":0.0045,"estimated":false}],
-  "byProject": [{"project":"P1","sessions":1,"…Totals"}],
-  "pricing": {"asOf":"2026-11-11","source":"https://www.anthropic.com/pricing"} }
-```
-- 역할 키는 `roles.ts`의 매핑 결과(null → lead, `plugin:qa` → qa, 없는 역할은 원문). `project` 필터가 있으면 byRole·total은 그 프로젝트만, byProject는 그 한 줄.
+#### (삭제) GET /api/summary
+토큰·비용 합계용이었으므로 만들지 않는다(개발 2차에서도 만들지 않음). 역할별·프로젝트별 스킬 횟수는 `/api/skills`의 `byRole`과 `project` 필터로 얻는다.
 
 #### GET /api/skills?project=&session=<key> (쿠키)
-`{"skills":[{"skill":"playwright-cli","count":2,"byRole":{"qa":2},"lastAt":"…"}]}` (스킬별 합. 세션 상세에는 에이전트별이 이미 있음)
+`{"skills":[{"skill":"playwright-cli","count":2,"byRole":{"qa":2},"lastAt":"…"}]}` (스킬별 합. 세션 상세에는 에이전트별이 이미 있음). 역할 키는 `RoleResolver`의 `role`(T1-6 후 `plugin:qa` → qa).
+
+#### POST /api/plan-usage/report (T1-8, 인증 Bearer), GET /api/plan-usage (T1-8, 쿠키)
+6.3절·6.4절.
 
 #### GET /api/characters (쿠키)
 ```json
@@ -765,11 +795,184 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 #### GET /api/characters/[id]/image (쿠키)
 `id`는 `^[a-z0-9_-]{1,64}$`만. 설정의 `image` 파일명은 `characters/<id>/` 안의 파일만(`path.resolve` 후 접두사 확인으로 경로 이탈 차단). png/webp만, `Cache-Control: private, max-age=60`. 없으면 404.
 
-### 6. API 환산 비용 (T1-3)
-- `cost/pricing.ts`: `{ asOf: '<기준일>', source: '<URL>', models: Record<string,{input:number; output:number}> /*USD per 1M*/ }`. 계산 `input*in + cache_read*in*cacheReadMul + cache_creation*in*1.25 + output*out`. `cacheReadMul`은 모델별(기본 0.1, 가격 페이지에 따로 적힌 모델은 그 값. 예: Opus 5.5·Sonnet 5.5는 0.05 — 2026-11-11 개발 1차에서 확인), 결과 `Math.round(x*1e5)/1e5`(vendor 방식). 캐시 쓰기 1.25배는 5분 캐시 기준(1시간 캐시 2배는 payload에 구분이 없어 반영 안 함 — 리스크).
-- 모델 이름 매칭: 정확히 같은 키 → 없으면 날짜 접미사(`-20251001` 등)를 뗀 키 → 없으면 Sonnet 최신 단가 + `estimated:true`(D-11). `model`이 null이어도 추정.
-- 단가표 대상(D-10): Opus·Sonnet·Haiku 최신 세대(5.x, `claude-haiku-5-5` 포함)와 4.5, 4.6. 개발 BOT이 구현 시 Anthropic 공개 가격 페이지에서 값을 확인해 넣고 `asOf`·`source`를 적는다. 참고로 vendor의 Opus 4.5/4.6 값($15/$75)과 Haiku 값($0.8/$4)은 현재 공개 단가와 다르므로 그대로 옮기지 않는다.
-- 합계 비용은 에이전트별 비용의 합(에이전트마다 자기 모델 단가). `estimated`는 하나라도 추정이면 true.
+### 6. 플랜 사용량 (T1-8)
+
+(이전 6절 "API 환산 비용"은 2026-11-11 범위 변경으로 삭제했다. D-10~D-12 참조도 없다.)
+
+구성: (가) dev-team-kit의 statusLine 스크립트 `statusline.mjs`가 stdin의 `rate_limits`를 골라 보낸다 → (나) 서버 `POST /api/plan-usage/report`가 계정 단위 마지막 값을 D-27 규칙으로 저장 → (다) `GET /api/plan-usage`가 조회 시각 기준 판정을 붙여 돌려주고 화면이 막대로 그린다.
+
+```mermaid
+sequenceDiagram
+  participant CC as Claude Code
+  participant SL as statusline.mjs
+  participant W as 기존 statusLine 명령
+  participant TX as 전송 자식(분리됨)
+  participant SV as 서버
+  CC->>SL: stdin JSON (300ms 디바운스, 새 갱신이 오면 실행 중인 것을 취소)
+  SL->>W: 같은 stdin (있을 때만, 2초 제한)
+  SL->>SL: 상태 파일+잠금으로 전송 여부 결정(D-22, D-23)
+  SL-->>TX: spawn detached + unref, 본문은 stdin으로
+  SL->>CC: 기존 명령 출력 그대로 또는 기본 한 줄, exit 0
+  TX->>SV: POST /api/plan-usage/report (curl, 5초 제한)
+```
+
+#### 6.1 수집 스크립트 `statusline.mjs` (dev-team-kit)
+
+위치: dev-team-kit `kit/team/observe/statusline.mjs` → 설치 시 `.claude/team/observe/statusline.mjs`(observe.mjs와 같은 폴더, 같은 설치 방식). Node 내장 모듈만 쓴다(의존성 없음). observe.mjs는 고치지 않는다(1단계 범위 밖).
+
+호출 형식(설치기가 넣는 값. statusLine은 hook과 달리 `args`가 없고 셸 문자열 하나다):
+```json
+"statusLine": { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/team/observe/statusline.mjs\"" }
+```
+- **[구현 시 확인 필요]** statusLine 명령 환경에 `CLAUDE_PROJECT_DIR`가 있는지 공식 문서에 적혀 있지 않다. 개발 BOT은 이 환경의 Claude Code에서 확인하고(스크립트가 `process.env.CLAUDE_PROJECT_DIR`와 `process.cwd()`를 디버그 파일에 적게 해 본다), 없으면 `.`(Claude Code가 띄운 폴더 = statusLine의 작업 폴더)로 동작하는지 확인한다. 둘 다 안 되면 설치기가 프로젝트 절대 경로를 넣지 말고(클라우드·다른 PC에서 깨짐) 책임자에게 보고한다. 스크립트 파일을 못 찾으면 상태 줄이 빈칸이 되어 기존 statusLine까지 안 보이게 되므로 반드시 확인한다(15절).
+
+실행 순서(`main(env)`). 모든 단계는 `try/catch`로 감싸고 어떤 경우에도 exit 0.
+1. **stdin 읽기**: 최대 64KB, 1초 안에 끝나지 않으면 그때까지 읽은 것으로 진행. `JSON.parse` 실패나 객체가 아니면 `input = null`(전송 안 함, 출력은 함).
+2. **감쌀 명령 결정**(D-25) — `resolveWrapCommand(env, scriptDir)`, 위에서부터 처음 찾은 것:
+   1. `env.AGENT_OBSERVER_STATUSLINE_INNER === '1'`이면 감싸지 않는다(자기 자신을 감싼 경우의 무한 실행 방지). 이때는 전송도 하지 않는다.
+   2. 스크립트 옆 `statusline.json`의 `wrap.command`(설치기가 프로젝트의 기존 statusLine을 옮겨 둔 것, 6.2절).
+   3. 사용자 설정 `${CLAUDE_CONFIG_DIR || ~/.claude}/settings.json`의 `statusLine`(`type`이 `command`일 때 `command`). 이유: 프로젝트 설정의 statusLine이 사용자 설정보다 우선이라, kit을 설치하면 사용자 설정에 있던 상태 줄이 이 프로젝트에서 사라진다. 설치 시 복사하지 않고 실행할 때마다 읽어 사용자가 나중에 바꿔도 따라간다.
+   4. 없으면 감싸지 않는다.
+   - 찾은 명령 문자열에 `/.claude/team/observe/statusline.mjs`가 들어 있으면 자기 자신이므로 버린다(다음 후보로).
+3. **감싼 명령 실행**(있을 때, 4단계와 동시에): `spawn(command, { shell: true, cwd: process.cwd(), env: {...env, AGENT_OBSERVER_STATUSLINE_INNER: '1'}, detached: POSIX만 true })`, stdin에 원래 stdin 원문을 그대로 쓴다. stdout을 최대 64KB 모은다. **2초**(D-25) 안에 exit 0으로 끝나면 그 stdout을 **바꾸지 않고** 그대로 출력한다(앞뒤 공백·줄바꿈·ANSI 포함). exit 코드가 0이 아니거나, 2초를 넘거나(POSIX는 `process.kill(-pid, 'SIGKILL')`로 셸과 그 자식까지, Windows는 `child.kill()`), 실행 자체가 실패하면 기본 한 줄(D-26)을 출력한다. stderr는 버린다.
+4. **전송 여부 결정**(D-22, D-23). 전송 조건이 아니면 건너뛴다: `AGENT_OBSERVER_DISABLE=1`, `AGENT_OBSERVER_URL` 없음, `input`이 null, 꺼낸 창이 0개, INNER 실행.
+   - `extractRateLimits(input)` → `{ five_hour?: {used_percentage, resets_at}, seven_day?: {…} }`. 창마다 `used_percentage`가 0~100 유한수, `resets_at`이 0보다 큰 정수일 때만 넣는다(서버 검증과 같은 규칙. 틀린 창은 없는 것으로 본다). `spend_limit` 등 다른 키는 읽지 않는다.
+   - 상태 파일: `path.join(os.tmpdir(), 'dev-team-kit-observe', 'plan-usage.json')`(observe.mjs와 같은 폴더 → 같은 OS 사용자의 모든 세션이 함께 쓴다 = "같은 PC") 형식 `{ "v": 1, "lastSentAt": <ms>, "lastSent": { "five_hour": {"used_percentage":42,"resets_at":1794398400}, … } }`.
+   - 순수 함수 `decideSend(state, current, nowMs, { minIntervalMs: 60_000, resendMs: 600_000 })`:
+     - `elapsed = state ? nowMs - state.lastSentAt : Infinity`. `elapsed < 0`(시계가 뒤로 감)이면 `Infinity`로 본다.
+     - `elapsed < minIntervalMs`면 false(1분 1회).
+     - `changed` = state가 없거나, `current`의 창 중 하나라도 `lastSent`에 없거나 `used_percentage`·`resets_at`이 다르면 true. (`current`에 없는 창은 비교하지 않는다. 창이 사라진 것은 Claude Code가 초기화 시각이 지나 뺀 것이라 변경으로 보지 않는다.)
+     - 결과 = `changed || elapsed >= resendMs`. 1분 안에 바뀐 값은 `lastSent`와 계속 다르므로 1분이 지난 뒤 첫 실행 때 보내진다(D-22). 같은 값은 10분마다 1회(D-23).
+   - 동시 실행 처리: 잠금 파일 `plan-usage.lock`을 `fs.openSync(…, 'wx')`로 만든다. 이미 있으면 그 파일 mtime이 10초 안이면 **이번 실행은 보내지 않는다**(다음 실행이 보냄), 10초보다 오래됐으면 지우고 한 번만 다시 시도. 잠금을 얻으면 상태 파일을 **다시 읽어** `decideSend`를 한 번 더 판단하고, 보낼 때는 상태 파일을 먼저 갱신(`.tmp`에 쓰고 rename)한 뒤 잠금을 지운다(finally).
+   - 상태 파일은 **보내기 전에** 갱신한다. 전송이 실패해도 재시도하지 않고 다음 조건(값 변경 + 1분, 또는 10분)을 기다린다(서버가 잠깐 꺼져도 최대 10분 뒤 다시 감).
+5. **전송**(분리된 자식 프로세스): 본문을 만든다.
+   ```json
+   { "v": 1, "ts": "2026-11-11T10:00:01.234Z", "remote": false,
+     "rate_limits": { "five_hour": { "used_percentage": 42, "resets_at": 1794398400 },
+                      "seven_day": { "used_percentage": 13, "resets_at": 1794700800 } } }
+   ```
+   - `remote` = `env.CLAUDE_CODE_REMOTE === 'true'`(observe.mjs와 같은 규칙). stdin의 작업 폴더, transcript 경로, 모델, 세션 비용, session_id 등은 넣지 않는다(본문은 위 키만으로 새로 만든다. stdin 객체를 복사해 지우는 방식 금지).
+   - `AGENT_OBSERVER_DEBUG=1`이면 본문을 stderr에 한 줄로 쓴다(테스트가 "보내기로 결정함"을 확인하는 용도).
+   - `spawn(process.execPath, [scriptPath, '--send'], { detached: true, stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true, env })`로 자식을 띄우고 본문을 자식 stdin에 쓴 뒤 `end()`, stdin의 `finish`(최대 200ms 대기) 후 `child.unref()`. 부모는 자식을 기다리지 않는다.
+   - 분리하는 이유: Claude Code는 새 갱신이 오면 실행 중인 statusLine 명령을 취소하고, 출력을 명령이 끝난 뒤에만 보여 준다. 부모에서 보내면 출력이 최대 5초 늦어지고 취소될 때 전송도 끊긴다. 토큰은 인자가 아니라 환경 변수로만 자식에 넘어간다.
+   - 자식(`--send` 모드): stdin에서 본문을 읽고 `send(`${base}/api/plan-usage/report`, token, body)` 후 exit 0. `send`·`fetchFallback`은 observe.mjs와 **같은 코드를 복사**한다(curl `-sS -m 5 -o /dev/null -X POST -H 'Content-Type: application/json' [-H 'Authorization: Bearer …'] --data-binary @-`, curl이 없으면 `fetch` 5초). 파일 머리에 "observe.mjs의 send와 같게 유지" 주석. (observe.mjs에서 export해 import하는 방법은 observe.mjs 수정이라 1단계 범위 밖. 2단계에 공통 `transport.mjs`로 합치기를 제안)
+   - 환경 변수 처리는 observe.mjs와 같다: `AGENT_OBSERVER_URL`(끝 `/` 제거), `AGENT_OBSERVER_TOKEN`(비었으면 Authorization 헤더 없음 — 클라우드에서는 Network secret이 붙임), `AGENT_OBSERVER_DISABLE`, `AGENT_OBSERVER_DEBUG`. 프록시: curl이 `HTTPS_PROXY`·`NO_PROXY`·`no_proxy`를 스스로 따르므로 스크립트는 따로 처리하지 않는다. 로컬 서버로 보내는 PC에 프록시 환경 변수가 있으면 사용자가 `NO_PROXY=127.0.0.1,localhost`를 둔다(README에 적음. 테스트는 자식 env에 넣는다).
+6. **출력**: 3단계 결과(감싼 명령 출력 또는 기본 한 줄)를 stdout에 쓰고 exit 0. 감싼 명령이 없으면 바로 기본 한 줄. 4·5단계 자체는 출력을 기다리게 하지 않는다(파일 몇 개 읽고 쓰기 + spawn. 목표 100ms 안).
+
+기본 출력(D-26) `formatDefault(current)`: 있는 창만 `5h 42% · 7d 13%`(`Math.round`), 한 창만 있으면 `7d 13%`, 없으면 빈 줄(`\n`). 색·ANSI는 쓰지 않는다.
+
+내보내는 함수(테스트용 export): `extractRateLimits`, `decideSend`, `formatDefault`, `resolveWrapCommand`, `buildBody`, `main`. 파일 끝은 observe.mjs와 같은 "직접 실행일 때만 main" 패턴.
+
+#### 6.2 설치기 변경 (dev-team-kit `bin/cli.mjs`)
+
+지금 설치기: `kit/team` → `.claude/team` 파일 복사(manifest 해시로 사용자 수정 보호), `kit/settings.json` 조각을 `mergeSettings`(순수)로 병합(hook 그룹 교체, `permissions.deny` 합집합), settings.json 백업 없음.
+
+바꿀 것
+- `kit/team/observe/statusline.mjs`를 추가한다(기존 복사 경로를 그대로 탄다).
+- statusLine은 `kit/settings.json` 조각에 넣지 **않는다**(넣으면 기존 값을 말없이 덮는다). `mergeSettings`에 statusLine 처리를 따로 넣는다. 시그니처 제안: `mergeSettings(existing, fragment, { statusLine: 'auto' | 'wrap' | 'skip' }) → { settings, statusLineAction, wrapSaved, notices }`(순수 유지, 파일 쓰기는 호출하는 쪽).
+  | 프로젝트 `.claude/settings.json`의 statusLine | 동작 |
+  |---|---|
+  | 없음 | kit 명령을 넣는다(`statusLineAction: 'install'`) |
+  | 이미 kit 명령(`command`에 `/.claude/team/observe/statusline.mjs` 포함) | 그대로 둔다. 명령 문자열만 최신 형식으로 맞춘다 |
+  | 다른 명령 | **감싸기**: 원래 statusLine 객체 전체를 `.claude/team/observe/statusline.json`에 `{ "v": 1, "savedAt": "<ISO>", "wrap": { …원래 객체… } }`로 저장하고, statusLine을 `{ type: 'command', command: <kit 명령>, …원래 객체의 command·type 외 필드(padding, refreshInterval 등) }`로 바꾼다 |
+  | `type`이 command가 아님 | 건드리지 않고 알림만 |
+- 감싸기는 사용자 확인 후에만 한다(D-25 "바꾸기 전에 알린다"): `--statusline=wrap`이면 바로, `--statusline=skip`이면 statusLine을 건드리지 않음, 지정 없음(`auto`)이면 TTY에서 "기존 statusLine `<명령>`을 감싸서 그대로 보이게 하고 플랜 사용량을 보냅니다. 계속할까요? [y/N]"을 묻고, TTY가 아니면 건너뛰고 `--statusline=wrap`으로 다시 실행하라고 출력한다. `--dry-run`은 무엇을 할지만 출력한다.
+- 알림(쓰기 전에 출력):
+  - `.claude/settings.local.json`에 statusLine이 있으면 그것이 우선이라 kit 스크립트가 실행되지 않는다고 알린다. local 파일은 고치지 않는다.
+  - 사용자 설정(`~/.claude/settings.json`)에 statusLine이 있으면 "실행 때 감싸서 그대로 보인다"고 알린다(6.1의 2-3). 사용자 설정은 고치지 않는다.
+- 되돌리기: `statusline.json`이 원래 값을 갖고 있다. 설치 완료 메시지와 kit README에 되돌리는 방법(settings.json의 statusLine을 `statusline.json`의 `wrap` 값으로 바꾸고 파일 삭제)을 적는다. (Should) `dev-team-kit restore-statusline [--target]` 명령으로 이를 자동으로 한다.
+- `statusline.json`은 설치기가 만드는 파일이라 kit이 배포하는 파일이 아니다 → manifest에 넣지 않고, 업데이트 때 지우거나 덮지 않는다. 이미 있고 현재 statusLine이 kit 명령이면 다시 설치해도 그대로 둔다.
+- kit README: statusLine 설명(보내는 값, 전송 간격, 환경 변수, 기존 statusLine과 함께 쓰는 방법, 되돌리기, `NO_PROXY`, 구독 계정에서만 값이 있음, 세션 첫 응답 이후에 값이 생김).
+- kit 저장소 테스트: `mergeSettings` statusLine 표의 각 행, `--statusline` 세 값, settings.local.json 알림.
+- 이 저장소 반영: kit 변경이 dev-team-kit에 머지된 뒤 설치기를 다시 실행해 `.claude/team/observe/statusline.mjs`와 `.claude/settings.json`의 statusLine을 받는다(지금 이 저장소에는 statusLine이 없어 "없음" 행). 이 저장소에서 사본을 손으로 고치지 않는다.
+
+#### 6.3 전송 형식과 수집 API `POST /api/plan-usage/report` (Bearer)
+
+결정: **별도 경로**로 받는다(ADR A9). `/api/events`의 새 event 종류로 넣지 않는다.
+
+검증(`plan/schema.ts`, zod strip):
+- `v === 1`(필수).
+- `ts`: ISO 8601(이벤트와 같은 규칙), 필수. 형식만 검사하고 저장하지 않는다(서버 수신 시각을 쓴다).
+- `remote`: boolean, 선택(없으면 false).
+- `rate_limits`: 객체, 필수. 그 안의 `five_hour`, `seven_day`는 각각 선택이고, 있으면:
+  - `used_percentage`: 숫자, 유한, 0 이상 100 이하(소수 허용).
+  - `resets_at`: 정수, 0 초과, `1e11` 미만(밀리초 값을 잘못 보낸 경우를 거른다).
+- 두 창이 모두 없으면 400, `issues: ["rate_limits"]`.
+- 정의되지 않은 키(`spend_limit`, 최상위 기타 필드)는 버린다. null 창은 "없음"과 같게 본다.
+
+처리 순서와 응답은 `/api/events`와 같다(같은 helper: Bearer → 크기 16KB → JSON → 검증 → `store.applyPlanUsage(report, now, mergePlanUsage)`).
+| 코드 | 경우 | 본문 |
+|---|---|---|
+| 202 | 저장(병합)됨 | `{"ok":true}` |
+| 400 | JSON 아님, 검증 실패 | `{"error":"invalid_payload","message":"…","issues":["rate_limits.five_hour.used_percentage"]}` |
+| 401 | 헤더 없음·토큰 틀림 / 서버 토큰 무효 | `{"error":"unauthorized"}` / `{"error":"server_token_invalid","message":"…"}` |
+| 405 | POST 외 | `Allow: POST` |
+| 413 | 16KB 초과 | `{"error":"payload_too_large"}` |
+| 500 | 저장 실패 | `{"error":"internal"}` |
+- 쿠키는 보지 않는다(쿠키만 있고 Bearer가 없으면 401).
+
+#### 6.4 서버 저장·병합·조회
+
+저장 모델: `PlanUsageState`(2절) 하나. 계정 구분 없음(D-28). Claude Code statusLine 입력 필드 목록(공식 문서, 2026-11-11 확인)에 계정·조직·이메일 식별자가 없으므로 구분할 수 있는 값이 없고, 따라서 저장할 식별 정보도 없다. 이력은 남기지 않는다.
+
+병합(D-27) `plan/merge.ts`, 순수:
+```
+mergePlanWindow(old, inc, remote, now):
+  old == null                      → { inc 값, receivedTs: now, remote }
+  inc.resetsAtSec > old.resetsAtSec → { inc 값, receivedTs: now, remote }          // 새 창
+  inc.resetsAtSec == old.resetsAtSec → { usedPercentage: max(old, inc), resetsAtSec 같음, receivedTs: now,
+                                         remote: inc가 더 크면 remote, 아니면 old.remote }
+  inc.resetsAtSec < old.resetsAtSec → { old 값 그대로, receivedTs: now }           // 늦게 온 옛 값 무시
+mergePlanUsage(prev, report, now): report.windows에 있는 창만 mergePlanWindow, 없는 창은 prev 그대로
+```
+- `receivedTs`는 값이 이기든 지든 갱신한다(D-27 "수신 시각은 마지막 수신으로 갱신"). 의미는 "이 창을 마지막으로 확인한 시각"이다.
+
+판정 `plan/view.ts`, 순수 `planUsageView(state, now, { staleMs: 15분, warnPercent: 80 })`. 창마다 위에서부터:
+| 순서 | 조건 | `status` | 비고 |
+|---|---|---|---|
+| 1 | 값 없음 | `none` | 다른 필드 없음 |
+| 2 | `now >= resetsAtSec*1000` | `expired` | 화면: "초기화됨 · 새 값 대기", 막대 비움. `level` 없음(null) |
+| 3 | `now - receivedTs > staleMs`(D-24, 초과) | `stale` | 값은 그대로 보이고 "N분 전 값" |
+| 4 | 그 외 | `ok` | |
+- `level`(ok·stale일 때, D-30): `usedPercentage >= 100` → `reached`("한도 도달"), `>= 80` → `near`("한도 가까움"), 그 외 `normal`.
+- 판정은 저장하지 않고 조회할 때마다 `now`로 계산한다(ADR A3과 같은 이유).
+
+`GET /api/plan-usage` (쿠키, `requireSession` 이중 확인, Bearer 무시 — D-16). 프로젝트 필터 인자 없음(계정 단위).
+```json
+{ "now": "2026-11-11T10:00:03.000Z",
+  "staleAfterSec": 900,
+  "windows": {
+    "five_hour": { "status": "ok", "usedPercentage": 42, "level": "normal",
+                   "resetsAt": "2026-11-11T12:00:00.000Z", "resetsAtEpoch": 1794398400,
+                   "receivedAt": "2026-11-11T10:00:01.300Z", "remote": false },
+    "seven_day": { "status": "none" } } }
+```
+- `expired`·`stale`도 `usedPercentage`·`resetsAt`·`receivedAt`을 그대로 준다(화면이 표시를 정한다). `expired`이면 `level: null`.
+- 화면은 남은 시간("2시간 13분 후")과 "N분 전 값"을 응답의 `now` 기준으로 계산한다(브라우저 시계 차이를 피하고 테스트에서 응답을 고정할 수 있게). 시각 표시는 브라우저 시간대.
+- 405(GET 외), 500 `{"error":"internal"}`.
+
+#### 6.5 화면 연결
+- 대시보드 상단(프로젝트 필터와 별개 영역)에 "플랜 사용량". 3초 폴링에 `GET /api/plan-usage`를 더한다(8절).
+- 막대마다 `<div role="meter" aria-valuemin=0 aria-valuemax=100 aria-valuenow=42 aria-label="5시간 사용량 42%">` + 보이는 글자 "42%". 경고는 글자("한도 가까움"/"한도 도달") + 색. `none` 안내 문구는 T1-8 (다) 그대로. 세부 모양은 designer 산출물을 따른다.
+
+#### 6.6 테스트
+단위(`tests/unit/planUsage.test.ts`)
+- `mergePlanWindow`: 처음 값, 같은 `resets_at` 50 → 40이면 50, 더 늦은 `resets_at` 5%면 5%, 더 이른 `resets_at`은 무시하되 `receivedTs` 갱신, remote 출처 규칙. `mergePlanUsage`: `five_hour`만 오면 `seven_day` 그대로.
+- `planUsageView`: none / `resets_at` 정각(=expired) / 1ms 전(ok) / 수신 후 정확히 15분(ok)·15분+1ms(stale) / expired가 stale보다 우선 / level 79.9·80·99.9·100.
+- `plan/schema`: -1, 101, `"42"`, `resets_at` 1.5·0·밀리초 값, 창 0개, `spend_limit`만 있음(= 창 0개 → 400), 모르는 키는 버림.
+API(`tests/api/planUsage.test.ts`, memory·file 두 구현)
+- 202 후 GET이 같은 값·`resetsAt`·`receivedAt`. 헤더 없음·틀린 토큰·서버 토큰 무효 → 401, 저장값 그대로. 400 표(위 schema 경우)에서 저장값 그대로. 413, 405. D-27 순서 시나리오. 쿠키 없이 GET 401, Bearer만으로 GET 401, 쿠키만으로 POST 401. fileStore: 저장 → `close()` → 같은 폴더로 새 인스턴스 → GET 값 유지. v1 `state.json`(usage 포함)을 넣고 시작 → 토큰 값이 사라지고 세션·스킬은 남음.
+- proxy 테스트: `/api/plan-usage/report`는 쿠키 없이 통과, `/api/plan-usage`는 401.
+스크립트(`tests/script/statusline.test.ts`, Vitest. `vitest.config.ts` include에 `tests/script` 추가)
+- 대상: 이 저장소의 설치 사본 `.claude/team/observe/statusline.mjs`를 `node`로 실행(없으면 이유를 출력하고 실패). 순수 함수(`decideSend`, `extractRateLimits`, `formatDefault`)는 같은 파일을 import해서 직접 테스트한다.
+- 받는 쪽: 테스트 안에서 `node:http` 서버를 127.0.0.1 임의 포트로 띄워 요청(경로, Authorization, 본문)을 모은다. 전송은 분리된 자식이 하므로 "보냄"은 최대 3초 폴링으로, "안 보냄"은 디버그 stderr에 본문이 없음 + 1초 기다려 요청 0개로 확인한다.
+- 자식 env: `AGENT_OBSERVER_URL=http://127.0.0.1:<포트>`, `AGENT_OBSERVER_TOKEN=<테스트 값>`, `AGENT_OBSERVER_DEBUG=1`, `TMPDIR=<테스트 폴더>/tmp`(상태 파일 격리), `HOME`·`CLAUDE_CONFIG_DIR=<테스트 폴더>/home`(**실제 사용자 statusLine을 감싸지 않게**), `NO_PROXY`·`no_proxy=127.0.0.1,localhost`, `AGENT_OBSERVER_DISABLE`·`CLAUDE_CODE_REMOTE`·`AGENT_OBSERVER_STATUSLINE_INNER` 제거.
+- 시각 조절: 스크립트에 시계 주입 환경 변수를 두지 않는다. 테스트가 상태 파일의 `lastSentAt`을 과거로 고쳐 쓴다(예: `now - 61초`, `now - 10분 1초`).
+- 경우(T1-8 수집 스크립트 수용 기준과 1:1): 첫 실행 1회 전송 / 같은 값 1분 안 재실행 안 보냄 / 바뀐 값 1분 안 안 보냄 → `lastSentAt` 61초 전으로 → 바뀐 값 1회 / 같은 값 61초 후 안 보냄 / 10분 1초 후 같은 값 1회 / `rate_limits` 없음·JSON 아님 → 안 보냄, exit 0 / `seven_day`만 → 본문에 `seven_day`만 / 본문 키가 정확히 `v, ts, remote, rate_limits`이고 창 안은 `used_percentage, resets_at`뿐(stdin에 `cwd`, `transcript_path`, `model`, `cost`를 넣고 본문에 그 값 문자열이 없음) / 요청을 받고 응답하지 않는 서버로 설정해도 부모가 1초 안에 exit 0 / URL 없음·`DISABLE=1` → 안 보냄, 기본 한 줄 출력 / 동시 3개 실행(바뀐 값) → 전송 최대 1회.
+- 감싸기: 설치 사본과 `statusline.json`을 테스트 폴더에 복사해(`statusline.json`이 스크립트 옆에 있어야 하므로. 사본은 읽기만 하고 고치지 않는다) 실행한다. `wrap.command = "printf 'MY-LINE\\n'"` → stdout이 정확히 `MY-LINE\n`이고 전송도 됨 / `exit 3` → 기본 한 줄, 전송 조건 그대로 / `sleep 5` → 2.5초 안에 기본 한 줄, exit 0 / `statusline.json` 없이 `CLAUDE_CONFIG_DIR/settings.json`에 statusLine → 그 출력 / 감쌀 명령이 statusline.mjs 자신 → 무한 실행 없이 끝남.
+- POSIX 셸 명령(`printf`, `sleep`)을 쓰므로 Windows에서는 이 묶음을 건너뛴다(`describe.skipIf(process.platform === 'win32')`). 1단계 검증 환경은 Linux.
+통합(`e2e/plan-usage.spec.ts`, Playwright webServer 3100): 설치 사본에 `five_hour` 42% / `seven_day` 13% stdin을 넣어 실행 → 로그인 쿠키로 `GET /api/plan-usage`를 5초까지 폴링 → 값·`resetsAtEpoch` 같음 → 화면에 "42%", "13%". 틀린 토큰으로 보내면 값이 바뀌지 않음.
+화면 상태(오래됨·만료·없음·경고): 서버 시계는 테스트에서 바꿀 수 없으므로 `page.route('/api/plan-usage', …)`로 정한 `now`와 `status`의 응답을 돌려줘 화면 표시만 확인한다. 판정 규칙 자체는 위 단위·API 테스트가 `now`를 주입해 확인한다.
 
 ### 7. 캐릭터 설정 (T1-6)
 - 파일 위치: `OBSERVER_CHARACTERS_DIR`(기본 `<루트>/characters`).
@@ -789,8 +992,9 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 - 역할 매핑 `roleKeyFor(agentType, roles)`: null → `lead`; 원문 키가 있으면 그것; `split(':').pop()` 키가 있으면 그것; 없으면 원문을 역할 이름으로, 캐릭터는 기본(null = 사각형).
 
 ### 8. 화면 (T1-5)
-- `/` 하나에 필터·세션 목록·세션 상세·합계·임시 사무실. 상세는 `?session=<key>`로 열어 새로고침·링크에 유지. 프로젝트 필터는 `?project=` + `localStorage`(Should).
-- 폴링: 클라이언트에서 3초마다 `/api/sessions`, `/api/summary`, (상세가 열려 있으면) `/api/sessions/[key]`. `document.visibilityState === 'hidden'`이면 멈추고 보이면 즉시 1회. 401이 오면 `/login`으로 이동. 데이터 가져오기 라이브러리(SWR 등)는 쓰지 않는다(`fetch` + `setInterval`로 충분).
+- `/` 하나에 플랜 사용량·필터·세션 목록·세션 상세·임시 사무실. 토큰 수·비용은 어디에도 없다. 상세는 `?session=<key>`로 열어 새로고침·링크에 유지. 프로젝트 필터는 `?project=` + `localStorage`(Should).
+- 로그인 화면은 `fetch('/api/auth/login')`로 보내고 204면 `next`(`safeNextPath`로 다시 확인)로 이동한다(로그인 API가 204라 JS 없는 form 제출로는 화면이 바뀌지 않음. 개발 2차 메모).
+- 폴링: 클라이언트에서 3초마다 `/api/sessions`, `/api/plan-usage`, (상세가 열려 있으면) `/api/sessions/[key]`. 숨긴 세션 수는 `/api/sessions`의 `hiddenCount`, 펼치면 `?hidden=only`. `document.visibilityState === 'hidden'`이면 멈추고 보이면 즉시 1회. 401이 오면 `/login`으로 이동. 데이터 가져오기 라이브러리(SWR 등)는 쓰지 않는다(`fetch` + `setInterval`로 충분).
 - 임시 사무실: `<canvas>` 대신 CSS grid의 `div`(사각형 + 이름 + 상태 문구)로 시작한다. 캐릭터 설정이 있으면 `background-image` + `background-position`으로 프레임을 자른다(`image-rendering: pixelated`). 영역: 책상 줄(working·thinking), 대기 줄(done), 경고 표시(waiting). 길찾기·이동은 3단계.
 - 스타일: 별도 UI 라이브러리 없이 CSS Modules(디자인은 designer 산출물을 따른다).
 
@@ -803,19 +1007,33 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 4. 202. 디스크 쓰기 실패는 서버 로그 + 다음 쓰기에서 재시도(응답은 이미 202. 메모리 상태는 유지).
 
 조회
-1. proxy가 쿠키 검증 → route가 `requireSession` → `store.listSessions` → `views`가 `now`로 effective 상태·합계·비용·역할 매핑 계산 → DTO.
+1. proxy가 쿠키 검증 → route가 `requireSession` → `store.listSessions` → `views`가 `now`로 effective 상태·스킬 집계·역할 매핑(RoleResolver) 계산 → DTO.
+
+플랜 사용량 수집(6절)
+1. Claude Code가 statusLine 명령 실행 → `statusline.mjs`가 감쌀 명령을 2초 제한으로 돌리면서 전송 여부를 결정 → 보낼 때만 분리된 자식이 `POST /api/plan-usage/report` → 부모는 출력하고 exit 0.
+2. 실패 시: 감싼 명령 실패·시간 초과 → 기본 한 줄. 서버 무응답·거부 → 자식이 5초 뒤 조용히 끝남, 다음 조건(값 변경 + 1분 또는 10분)에 다시 보냄. 잘못된 stdin → 안 보냄.
+3. route: 401 / 413 / 400 → 저장 안 함. 통과하면 `store.applyPlanUsage`(뮤텍스 안 D-27 병합) → 202.
+
+플랜 사용량 조회
+1. proxy 쿠키 검증 → `requireSession` → `store.getPlanUsage()` → `planUsageView(state, now)` → DTO.
 
 ### 10. 설계 결정 (ADR)
 | # | 결정 | 고려한 대안 | 이유 |
 |---|---|---|---|
-| A1 | 스냅숏 + reducer, 이벤트는 보관용 | 저장된 이벤트를 조회 때마다 재생 | D-4로 이벤트가 지워져도 토큰·스킬이 남아야 함. 재생은 보관 한도와 충돌 |
+| A1 | 스냅숏 + reducer, 이벤트는 보관용 | 저장된 이벤트를 조회 때마다 재생 | D-4로 이벤트가 지워져도 스킬·BOT 호출 기록이 남아야 함. 재생은 보관 한도와 충돌 |
 | A2 | 늦게 온 이벤트는 전이 생략(ts·seq 비교) | 세션 이벤트 전체를 ts로 정렬해 재계산 | S-13을 만족하면서 단순. DB 이식 시에도 행 하나 갱신 |
 | A3 | 시간 초과·응답 없음 표시는 조회 시 계산 | 타이머·주기 작업으로 상태 저장 | Vercel 서버리스에 상주 타이머 없음. 테스트에서 `now` 주입 |
 | A4 | 파일 저장소는 JSON 한 파일 + 메모리 캐시 + 원자적 rename | SQLite(better-sqlite3), JSONL 추가 쓰기 | 네이티브 의존성 없음. 1단계 데이터 규모 작음. 2단계에 DB로 교체 예정 |
 | A5 | 쿠키는 무상태 HMAC 서명 | iron-session·next-auth, 서버 세션 저장 | 사용자 1명·비밀번호 하나. 의존성 0, proxy 런타임에서 Web Crypto로 동작 |
 | A6 | 검증은 zod | 손으로 쓴 검증, valibot, ajv | 타입 추론으로 NormalizedEvent와 스키마를 하나로 유지, strip 기본. 서버에서만 쓰므로 크기 부담 없음 |
 | A7 | 그림은 인증된 route로 제공 | `public/characters` 정적 제공 | "로그인한 사용자만 화면을 본다" + 공개 저장소 시기의 그림 보호 |
-| A8 | 통합 테스트는 Playwright 안에서 | Vitest에서 서버 spawn | 서버 하나(webServer)를 화면 테스트와 공유. 단위·API 테스트(`pnpm test`)는 서버 없이 빠르게 |
+| A8 | 통합 테스트는 Playwright 안에서 | Vitest에서 서버 spawn | 서버 하나(webServer)를 화면 테스트와 공유. 단위·API 테스트(`pnpm test`)는 서버 없이 빠르게. statusline.mjs의 전송 조건 테스트는 서버 대신 테스트 안 `node:http` 수신기로 Vitest에서 한다(6.6) |
+| A9 | 플랜 사용량은 별도 경로 `POST /api/plan-usage/report` | `/api/events`에 새 event 종류(`PlanUsage`) 추가 | 이벤트 payload v1은 `session_id`·`project`가 필수이고 reducer가 세션을 만든다. 플랜 사용량은 계정 단위라 가짜 세션이 생기거나 reducer·검증에 예외 분기가 필요하다. v1의 event 10종 목록도 바뀐다. 별도 경로는 검증·저장·테스트가 분리되고 인증·크기 제한 helper는 그대로 함께 쓴다 |
+| A10 | 수집 경로와 조회 경로를 나눔(`/report` POST vs GET) | 한 경로에서 POST=Bearer, GET=쿠키 | proxy 공개 규칙이 경로만으로 정해진다(메서드별 예외를 두면 실수로 GET이 열릴 수 있음) |
+| A11 | 전송은 분리된 자식 프로세스(detached + unref) | 부모에서 await로 전송, 부모에서 fire-and-forget fetch | Claude Code는 statusLine 명령이 끝나야 출력을 보이고 새 갱신 때 실행 중인 명령을 취소한다. await는 출력 지연, 부모 안 비동기 전송은 부모 종료·취소 때 끊긴다 |
+| A12 | 간격 제어는 tmpdir 상태 파일 + O_EXCL 잠금 | 서버 쪽 rate limit만, 세션별 상태 | "같은 PC에서 1분 1회"는 세션 사이에 공유돼야 한다. observe.mjs와 같은 상태 폴더라 테스트에서 `TMPDIR`로 격리된다 |
+| A13 | 기존 statusLine은 실행 때 감싼다(프로젝트 값은 `statusline.json`에 보관, 사용자 값은 실행 때 읽음) | 설치 때 기존 명령을 kit 명령 문자열에 이어 붙임(`a; b`), 기존 값을 덮고 안내만 | 출력이 그대로 보여야 하고(D-25) 원래 값을 되돌릴 수 있어야 한다. 셸 문자열 이어 붙이기는 따옴표·OS별 셸 차이로 깨지기 쉽다. 사용자 설정은 나중에 바뀔 수 있어 복사하지 않는다 |
+| A14 | 판정(만료·오래됨·경고)은 서버가 조회 때 `now`로 계산, 화면은 응답 `now` 기준 | 화면이 브라우저 시계로 판정 | 기획 (나) "서버가 계산한 표시 상태". 브라우저 시계 차이 영향 없음. Playwright는 응답을 고정해 화면만 확인 |
 
 ### 11. 환경 변수
 `.env.example`에 이름만 커밋한다(값 없음). 로컬 값은 `.env.local`(gitignore됨).
@@ -827,8 +1045,19 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 | `OBSERVER_STORE` | 아니오 | `file` | `file` \| `memory` |
 | `OBSERVER_DATA_DIR` | 아니오 | `./.data` | 파일 저장소 폴더 |
 | `OBSERVER_CHARACTERS_DIR` | 아니오 | `./characters` | 역할·캐릭터 설정 폴더 |
-상수(환경 변수 아님, `src/config.ts` 한곳): 본문 16KB, 문자열 256자, 이벤트 500개/7일, 시간 초과 10/30분, 승인 대기 응답 없음 24시간, 쿠키 30일, 실패 5회/분, 종료 세션 24시간, 폴링 3초.
-observe.mjs 쪽(보내는 PC): `AGENT_OBSERVER_URL=http://127.0.0.1:3000`, `AGENT_OBSERVER_TOKEN=<OBSERVER_TOKEN과 같은 값>`.
+상수(환경 변수 아님, `src/config.ts` 한곳): 본문 16KB(플랜 사용량 수집도 같음), 문자열 256자, 이벤트 500개/7일, 시간 초과 10/30분, 승인 대기 응답 없음 24시간, 쿠키 30일, 실패 5회/분, 종료 세션 24시간, 폴링 3초, **플랜 사용량 오래됨 15분(D-24, `planStaleMs`), 경고 80%(D-30, `planWarnPercent`), 도달 100%**.
+서버 쪽에 새 환경 변수는 없다.
+
+보내는 PC(observe.mjs와 statusline.mjs가 같은 값을 쓴다)
+| 이름 | 설명 |
+|---|---|
+| `AGENT_OBSERVER_URL` | 예: `http://127.0.0.1:3000`. 없으면 둘 다 보내지 않는다(statusline.mjs는 출력은 한다) |
+| `AGENT_OBSERVER_TOKEN` | `OBSERVER_TOKEN`과 같은 값. 클라우드에서는 비우고 Network secret을 쓴다 |
+| `AGENT_OBSERVER_DISABLE` | `1`이면 전송 안 함 |
+| `AGENT_OBSERVER_DEBUG` | `1`이면 보낼 본문을 stderr에 |
+| `NO_PROXY` / `no_proxy` | 프록시 환경에서 로컬 서버로 보낼 때 `127.0.0.1,localhost` (curl이 읽음) |
+| `AGENT_OBSERVER_STATUSLINE_INNER` | statusline.mjs가 감싼 명령에 붙이는 내부 표시. 사용자가 설정하지 않는다 |
+statusline.mjs 상수(스크립트 안): 최소 전송 간격 60초(D-22), 같은 값 재전송 10분(D-23), 감싼 명령 제한 2초(D-25), stdin 읽기 1초·64KB, 잠금 유효 10초, curl 5초.
 
 ### 12. 의존성
 버전은 설치 시점의 최신 안정판을 `pnpm add -E`로 **정확한 버전 고정**하고 `pnpm-lock.yaml`을 커밋한다. 아래 메이저는 설계 기준.
@@ -842,6 +1071,7 @@ observe.mjs 쪽(보내는 PC): `AGENT_OBSERVER_URL=http://127.0.0.1:3000`, `AGEN
 | @playwright/test | 최신 | 개발 | 화면·통합 테스트(Chromium만 설치: `pnpm exec playwright install chromium`) |
 | eslint, eslint-config-next | next와 맞춤 | 개발 | 린트(선택) |
 - 그 외 런타임 의존성(인증 라이브러리, 상태 관리, UI 키트, SWR, DB 드라이버)은 추가하지 않는다.
+- 2026-11-11 개정(플랜 사용량)으로 늘어나는 의존성은 없다. 서버는 기존 zod, statusline.mjs는 Node 내장 모듈만 쓴다.
 - **새 의존성이 생기므로 보안(security) 단계는 필수다.** `pnpm audit` 결과를 보안 보고서에 남긴다.
 - Node 22 LTS 이상(`engines`에 적음). `packageManager` 필드에 pnpm 버전 고정.
 
@@ -868,7 +1098,7 @@ observe.mjs 쪽(보내는 PC): `AGENT_OBSERVER_URL=http://127.0.0.1:3000`, `AGEN
    - 자식 env: `AGENT_OBSERVER_URL=http://127.0.0.1:3100`, `AGENT_OBSERVER_TOKEN=<테스트 토큰>`, `AGENT_OBSERVER_DISABLE` 제거, `TMPDIR=W/tmp`(observe.mjs의 상태 파일 `os.tmpdir()/dev-team-kit-observe`를 테스트마다 격리), **`NO_PROXY=127.0.0.1,localhost`와 `no_proxy` 같은 값**(클라우드 환경의 `HTTPS_PROXY`를 curl이 따라가 로컬 요청이 프록시로 가는 것 방지), `CLAUDE_CODE_REMOTE` 제거.
    - `cwd`는 git 저장소가 아니므로 `project` = 폴더 이름(`path.basename(W)`), `branch` = null. 조회 시 이 값으로 필터한다.
    - observe.mjs의 ts는 `new Date()`라 연속 실행에서 같은 ms가 될 수 있다 → 서버의 seq(도착 순, D-7)로 순서가 보장됨을 함께 확인하는 셈이다.
-3. 로그인 API로 쿠키를 받아 `GET /api/sessions?project=<basename>` → 세션 1개, 상태 `done`. `GET /api/sessions/[key]` → lead usage가 `input 6, output 398, cache_creation 12285, cache_read 100229`.
+3. 로그인 API로 쿠키를 받아 `GET /api/sessions?project=<basename>` → 세션 1개, 상태 `done`. `GET /api/sessions/[key]` → lead가 있고 상태 `done`. 두 응답 본문(텍스트)에 `usage`, `cost`, `cache_read`, `398`, `100229`(transcript에 넣은 토큰 수)가 없다(T1-7 "조회 결과에 usage의 토큰 수가 없다"). 1단계의 transcript는 observe.mjs가 PostToolUse에 `usage`를 실제로 넣어 보내게 하려고 그대로 쓴다(서버가 버리는지 확인하는 용도).
 4. 틀린 토큰 케이스: 새 session_id로 `AGENT_OBSERVER_TOKEN=wrong`로 SessionStart를 보내고, 조회에 그 세션이 없는지 확인.
 - 전제: 실행 환경에 `curl`이 있어야 한다(없으면 observe.mjs가 `fetch`로 대체하므로 동작은 같음).
 - 주의: 이 저장소의 `.claude/settings.json` hook도 observe.mjs를 부른다. 개발 중 셸에 `AGENT_OBSERVER_URL`이 설정돼 있으면 개발 BOT 자신의 활동이 개발 서버로 들어간다(무해하지만 테스트 데이터와 섞이지 않게 E2E는 별도 포트·데이터 폴더를 쓴다).
@@ -877,13 +1107,51 @@ observe.mjs 쪽(보내는 PC): `AGENT_OBSERVER_URL=http://127.0.0.1:3000`, `AGEN
 | 리스크 | 영향 | 대응 |
 |---|---|---|
 | 같은 이벤트 중복 전송 시 스킬 횟수 이중 계산 | 횟수 부정확 | payload에 이벤트 ID가 없어 1단계는 허용. 2단계에 observe.mjs에 이벤트 ID 추가를 제안(이번 범위 밖) |
-| 파일 저장소 디바운스 중 프로세스 종료 | 최대 250ms 이벤트 손실 | 허용. usage는 누적값이라 다음 이벤트로 회복됨 |
+| 파일 저장소 디바운스 중 프로세스 종료 | 최대 250ms 이벤트·플랜 사용량 손실 | 허용. 상태는 다음 이벤트로, 플랜 사용량은 다음 전송(최대 10분)으로 회복됨 |
+| v1 → v2 저장 파일 변환 실패 | 개정 전 개발 데이터 손실 | 변환 실패 시 지금처럼 `.bak-<시각>`으로 옮기고 빈 상태로 시작(1단계 개발 데이터라 허용) |
 | 여러 프로세스가 같은 `.data` 사용(dev와 start 동시 실행) | 서로 덮어씀 | 문서로 금지. 시작 시 `.data/lock`(pid) 확인 후 다른 프로세스가 살아 있으면 경고 로그 |
 | 서명 쿠키는 로그아웃해도 값이 유출되면 만료까지 유효 | 세션 탈취 | HttpOnly·SameSite. 강제 무효화는 비밀번호(또는 SECRET) 변경. 로컬 1단계에서 허용 |
 | 로그인 시도 제한이 메모리 | 재시작으로 초기화 | 허용(로컬). 2단계에 Redis로 |
-| 1시간 캐시 쓰기 단가 미반영, 모델 혼용(D-12) | 비용 오차 | 화면에 "추정치" 안내 문구. 단가표 기준일 표시 |
 | 미래 ts | 종료 판정 지연 | 서버 시각+5분으로 보정 |
+| **(보안 검토 대상)** Origin 헤더 없는 POST 통과 | Origin을 붙이지 않는 오래된 브라우저·도구에서 CSRF 가능성 | 쿠키 SameSite=Lax로 다른 사이트 POST에는 쿠키가 실리지 않음, 현대 브라우저는 POST에 Origin을 붙임, 로컬 127.0.0.1만 열기. `Origin: null`·해석 불가 값은 403. 비교 기준이 `Host` 헤더라 프록시 뒤(2단계 Vercel)에서는 `x-forwarded-host`와의 관계를 다시 본다. security BOT이 이 규칙을 확인한다 |
+| statusLine 명령 환경에 `CLAUDE_PROJECT_DIR`가 없을 수 있음(문서 미기재) | 스크립트를 못 찾아 상태 줄이 빈칸 → **기존 statusLine까지 안 보임** | 6.1 [구현 시 확인 필요]. 확인 전에는 이 저장소의 settings.json에만 넣고 사용자 PC 설치는 확인 후 `[사용자 확인]` |
+| 프로젝트 statusLine이 사용자 설정 statusLine보다 우선 | kit 설치 후 사용자 상태 줄이 사라짐 | 실행 때 사용자 설정 statusLine을 읽어 감싼다(6.1 2-3) |
+| `.claude/settings.local.json`의 statusLine이 우선 | kit 스크립트가 실행되지 않아 플랜 사용량이 안 옴 | 설치기가 알림. local 파일은 고치지 않음 |
+| 감싼 명령 2초 제한 | 원래 2초 넘게 걸리던 statusLine은 기본 한 줄로 바뀜 | D-25 결정. README에 적음 |
+| 감싼 명령이 다시 statusline.mjs를 부름 | 무한 실행 | `AGENT_OBSERVER_STATUSLINE_INNER` 표시 + 명령 문자열 검사 |
+| 전송 실패 시 재시도 없음 | 최대 10분 값 지연, 15분 넘으면 "오래됨" | 허용. statusLine은 세션 이벤트가 있을 때만 실행되므로 한가한 세션에서는 값이 그대로여도 "오래됨"이 뜰 수 있다(의도: "최근 확인 못 함") |
+| 같은 PC 여러 세션 동시 실행 | 1분 1회 초과 전송 | O_EXCL 잠금, 잠금 실패 시 이번 실행은 보내지 않음. 서버 병합은 같은 값에 대해 멱등 |
+| 토큰이 curl 인자로 보임(`ps`) | 같은 PC의 다른 사용자가 토큰을 볼 수 있음 | observe.mjs와 같은 수준(기존 리스크). 2단계 공통 transport에서 `-H @파일` 또는 fetch로 바꾸기를 제안 |
+| 여러 계정 값 섞임(D-28) | 다른 계정 사용률이 보임 | 입력에 계정 식별자가 없어 구분 불가. 알려진 한계 |
+| `resets_at`이 보고마다 몇 초씩 흔들림 | 더 늦은 `resets_at`의 작은 값이 이겨 사용률이 잠깐 줄어 보일 수 있음 | D-27 그대로 구현. 실제로 흔들리면 "60초 안 차이는 같은 창" 허용 범위를 기획에 제안 |
+| Windows: 셸(cmd.exe), 프로세스 그룹 kill 없음, detached 콘솔 창 | 감싼 명령 시간 초과 시 손자 프로세스가 남을 수 있음, 창 깜빡임 | `windowsHide: true`, `child.kill()`만. 1단계 검증은 Linux, Windows·macOS는 `[사용자 확인]` |
+| 클라우드 세션에서 statusLine 미실행 가능(D-29) | 클라우드 값 없음 | 로컬 값으로 같은 계정 사용률을 봄. 2단계 확인 |
 | `x-forwarded-for` 위조로 실패 제한 회피 | 무차별 대입 | 전역 카운터(분당 20회)를 함께 둔다. 로컬 127.0.0.1만 열기 |
 | 경로 이탈(캐릭터 이미지) | 임의 파일 읽기 | id 정규식 + resolve 접두사 검사 |
 | Next 16/15 차이(proxy vs middleware, 런타임) | 인증 우회 | route 안 `requireSession` 이중 방어 + API 테스트에서 각 조회 route를 쿠키 없이 호출해 401 확인 |
 | Windows·macOS 차이 | rename 원자성(Windows는 대상 파일이 열려 있으면 실패) | 실패 시 1회 재시도 후 로그. 1단계 검증 환경은 Linux |
+
+### 16. 토큰·비용 코드 제거 대상 (2026-11-11 범위 변경)
+
+개발 1·2차에서 만든 토큰·API 환산 비용 코드를 지운다. 스킬·BOT 호출 기록, 상태 계산, 저장소, 인증, 조회는 유지한다. 지운 뒤 `pnpm typecheck`·`pnpm test`·`pnpm build`가 통과해야 하고, `rg -n "usage|Usage|cost|pricing|PRICING|Totals" src app`에 남는 것은 `KeyUsage`(auth/cookie.ts의 Web Crypto 타입)와 주석의 "usage는 버린다" 설명뿐이어야 한다.
+
+| # | 파일 | 할 일 |
+|---|---|---|
+| R-1 | `src/cost/pricing.ts` | 파일 삭제(`src/cost/` 폴더째) |
+| R-2 | `src/state/usage.ts` | 파일 삭제(`mergeUsage`) |
+| R-3 | `src/aggregate/totals.ts` | 삭제: `emptyTotals`, `agentTotals`, `addInto`, `hasTokens`, `addAgent`, `sessionTotals`, `overallTotals`, `roleTotals`, `projectTotals`, `@/cost/pricing` import, `Totals`·`RoleTotal`·`ProjectTotal`·`AgentState` import. 유지: `RoleOf`, `defaultRoleOf`, `skillUses`, `skillSummary`, `SkillSummary`, `calledAgents`. 머리 주석을 "스킬 집계·BOT 호출 목록"으로 고친다. 파일 이름은 그대로 둔다 |
+| R-4 | `src/domain/types.ts` | 삭제: `Usage`, `SubagentInfo.usage`, `NormalizedEvent.usage`, `AgentState.usage`, `Totals`, `RoleTotal`, `ProjectTotal`, `emptyUsage()`. 추가: 2절의 `PlanWindowName`, `PlanWindowState`, `PlanUsageState`, `PlanReport`. 머리 주석의 "합계 타입"을 고친다 |
+| R-5 | `src/collect/schema.ts` | 삭제: `usageSchema`, `count`, 최상위 `usage` 키, `subagentSchema.usage`, `parsePayload`의 `ev.usage` 대입과 `subagent.usage` 대입. strip 모드라 `usage`가 어떤 형식으로 와도 버려진다(D-21) |
+| R-6 | `src/state/reducer.ts` | 삭제: `emptyUsage`·`mergeUsage` import, `newAgent`의 `usage`, "usage 병합" 블록, `subagent` 블록 안의 `sub.usage = …`. `subagent` 블록의 에이전트 생성·`agentType` 채우기는 유지. 머리 주석 "usage 병합·" 삭제 |
+| R-7 | `src/store/core.ts`, `fileStore.ts` | `SCHEMA_VERSION = 2`, `StoreData.planUsage`, `emptyData()`에 빈 플랜 사용량, v1 → v2 변환(3절), `getPlanUsage`·`applyPlanUsage`(6.4). 이것은 제거가 아니라 변경이지만 같은 차수에 한다 |
+| R-8 | `src/query/views.ts` | 머리 주석의 "1차의 cost·aggregate 코드는 지시가 있을 때까지 남긴다" 문장 삭제(코드 변경 없음) |
+| R-9 | `tests/unit/cost.test.ts` | 파일 삭제. 단, `describe('스킬·BOT 호출 기록')` 블록(3개 테스트)은 `tests/unit/skills.test.ts`로 옮긴다(T1-3 수용 기준). import는 `@/aggregate/totals`의 `skillSummary`·`skillUses`·`calledAgents`만 |
+| R-10 | `tests/helpers/events.ts` | `usage()` 도우미와 `Usage` import 삭제 |
+| R-11 | `tests/unit/state.test.ts` | S-05: `subagent`에서 `usage` 인자 삭제, `a1(end).usage`·`lead(end).usage` 확인 2줄 삭제. S-13c: 제목을 "늦게 온 이벤트도 스킬·세션 lastEventTs는 반영한다"로, 이벤트의 `usage` 인자와 `usage.output` 확인 삭제(스킬·상태 확인은 유지). "applyEvent는 입력 세션을 바꾸지 않는다": `usage` 인자 삭제 |
+| R-12 | `tests/unit/store.test.ts` | 보관 한도 테스트: 이벤트의 `usage` 인자와 `usage.input` 확인 삭제, 제목의 "(토큰·스킬)"을 "(스킬)"로 |
+| R-13 | `tests/api/events.test.ts` | 400 표의 `usage.output 음수`, `usage.input 소수` 두 줄은 "**202이고 usage가 저장되지 않는다**" 테스트로 바꾼다(D-21). `subagent.agent_id 없음` 줄은 `subagent`에서 `usage`를 빼고 유지. "정의 안 된 필드" 테스트: `usage`를 HANDOFF 예시 그대로 보내고 마지막 `expect(e.usage).toEqual(…)`을 `expect(e).not.toHaveProperty('usage')`로, 저장 텍스트에 `"usage"`, `"cache_read"`, `"cache_creation"`, `"messages"`가 없음을 더한다. `subagent.usage`가 든 PostToolUse(Agent)도 같은 확인을 1개 더한다(T1-1 수용 기준) |
+| R-14 | `tests/api/query.test.ts` | S-05 테스트의 이벤트에서 `usage` 인자 삭제(`send`가 저장소에 바로 넣으므로 타입에서 빠짐). 응답에 `usage`·`cost`·`totals`·`pricing`이 없다는 확인은 유지 |
+| R-15 | `THIRD_PARTY_NOTICES.md` | `src/cost/pricing.ts` 행 삭제(vendor `pricing.js`를 더 이상 옮겨 쓰지 않음) |
+| R-16 | `docs/team/dev-notes.md` | 지우지 않는다(이력). 이번 차수 노트에 "1차 '단가 확인 결과'·'설계와 달라진 점 1, 2, 6'과 Haiku 단가 제한은 범위 변경으로 폐기"라고 적는다 |
+- `proxy.ts`는 제거가 아니라 추가: `PUBLIC_EXACT`에 `/api/plan-usage/report`. 머리 주석 표도 같이 고친다.
+- 하지 않는 것: `vendor/pixel-agent-desk/src/pricing.js`는 vendor 원본이라 그대로 둔다. `.claude/team/observe/observe.mjs`는 고치지 않는다(계속 usage를 보내도 서버가 버린다).
