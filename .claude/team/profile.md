@@ -61,6 +61,9 @@
 - 개발 커밋은 해당 스테이지 이슈 번호를 커밋 형식에 맞춰 단다. 스테이지가 끝나면 마지막 커밋이나 PR에서 `Closes #번호`로 닫는다.
 - 마일스톤·이슈 생성은 외부에 공개되는 작업이므로 만들기 전에 목록을 사용자에게 보여 주고 승인받는다.
 
+- 커밋 작성자: `winterairy`. 클라우드 환경 기본값(Claude)을 쓰지 않는다. Default 환경 변수 GIT_AUTHOR_*/GIT_COMMITTER_*로 설정됨(2026-11-11). 2026-11-11 이전 작업 브랜치 커밋은 작성자가 Claude로 남아 있다.
+- 기본 브랜치 병합: Squash and merge로 한다(작업 브랜치 이력은 다시 쓰지 않는다).
+
 ## 기타 규칙
 - 저장소가 공개인 동안 캐릭터 그림, 토큰, 실제 수집 데이터를 커밋하지 않는다(`characters/`, `public/characters/*`, `.env*` 는 gitignore).
 - 원본 Pixel Agent Desk 그림을 쓰거나 본떠 그리지 않는다. `vendor/` 코드는 바로 쓰지 말고 옮겨 고치며 출처를 표시한다(THIRD_PARTY_NOTICES.md).
