@@ -244,3 +244,17 @@ R-16: 1차 '단가 확인 결과'·'설계와 달라진 점 1, 2, 6'과 Haiku �
 - 왜 Map이 아니라 helper인가: `structuredClone`·`JSON.parse`는 결과를 일반 객체로 만들기 때문에 null-prototype만으로는 부족하다. 타입(`Record`)과 저장 형식을 바꾸지 않고, 접근을 항상 자기 속성으로 제한하는 쪽이 범위가 작고 확실하다.
 - 스키마 결정: `/api/events`·`/api/plan-usage/report`는 세 값을 **거부하지 않고 그대로 저장한다**. `skill`·`subagent_type`은 모델 입력에서 오므로 400으로 막으면 이벤트 하나 때문에 상태 기록이 빠진다(D-21 정신: 수집이 끊기지 않게). 근본 원인인 맵 접근을 고쳤으므로 이중 방어는 두지 않았다. 플랜 schema는 외부 문자열을 키로 쓰지 않는다(창 이름은 고정 목록).
 - 테스트: `tests/api/protoKeys.test.ts`(memory·file 각 3개). 세 값을 agent_id·agent_type·skill·subagent_type·session_id·project·tool, dismiss/restore/상세 경로 key로 보낸 뒤 로그인 204·`/api/sessions` 200·상세·스킬 200, `({}).status` 등 undefined, Object.prototype 속성 목록 불변, 값이 그대로 저장됨, fileStore 다시 읽기를 확인한다. 수정 전 코드로 돌리면 6개 모두 실패한다.
+
+### SEC-03 (Low) 보안 헤더
+- `next.config.ts` `headers()`로 모든 경로에 `Content-Security-Policy`(`frame-ancestors 'none'`, `default-src 'self'`, `object-src 'none'`, `base-uri`·`form-action 'self'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`을 붙였다.
+- 제한: Next.js App Router가 nonce 없이 inline script를 넣고 React `style` 속성을 쓰므로 `script-src`·`style-src`에 `'unsafe-inline'`이 있다. 개발 모드(`NODE_ENV !== 'production'`)는 HMR용 `'unsafe-eval'`·`ws:`를 더한다. nonce 기반 CSP와 HSTS는 2단계(배포)에서 검토한다.
+- 테스트: `e2e/security-headers.spec.ts`(`/login`·`/api/sessions` 헤더, 로그인→대시보드 중 CSP 위반 콘솔 없음).
+
+### DES-01 (Low) 로그인 오류 테두리
+- `app/login/login.module.css`: `.input:focus-visible`(특이도 0,2,0)이 `.inputError`를 덮었다. `.inputError:focus-visible`을 같은 규칙에 넣어 포커스 중에도 테두리는 danger, 바깥 링은 전역 `:focus-visible`(focus-ring)이 그대로 그린다.
+- 테스트: `e2e/flow.spec.ts` 401 뒤 포커스된 입력창의 border 색 = `--color-danger` 계산값.
+
+### QA-01 (Low) 두 창 모두 없음일 때 계기판
+- 책임자 결정(T1-5 "없음 상태도 보인다")에 따라 `PlanUsageMini`가 두 창 모두 none이어도 그린다. 응답 전(`plan === null`)만 숨긴다. 표시 문자는 한 창 없음과 같은 `–`(기존 표기 유지).
+- DESIGN.md의 "두 창 모두 none이면 띠를 그리지 않는다" 문장은 책임자가 고친다(코드·테스트만 바꿈).
+- 테스트: `e2e/plan-usage-screen.spec.ts` 1번을 "계기판 보이고 두 창 data-status=none, `–`, 0% 없음"으로 바꿨다.
