@@ -14,10 +14,10 @@
 | 설계 | 완료 | architect | docs/HANDOFF.md#1단계-설계 | |
 | ★승인1 | 완료 | 사용자 | | 승인 후 마일스톤·스테이지 이슈 생성 |
 | 디자인 명세 | 완료 (승인됨) | designer | DESIGN.md, docs/team/design-spec-stage1.md | |
-| 개발 | 진행 (1·2차 완료, 3차 진행) | developer | | |
-| QA | 대기 | qa | | |
-| 보안 | 대기 | security | | |
-| 디자인 리뷰 | 대기 | designer | | |
+| 개발 | 완료 | developer | | |
+| QA | 진행 | qa | | |
+| 보안 | 진행 | security | | |
+| 디자인 리뷰 | 진행 | designer | | |
 | 운영 | 대기 | devops | | |
 | 문서 반영 | 대기 | planner | | |
 | ★승인2 | 대기 | 사용자 | | |

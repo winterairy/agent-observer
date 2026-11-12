@@ -23,8 +23,8 @@
 - 설치: pnpm install
 - 타입 검사: pnpm typecheck (= tsc --noEmit)
 - 린트: (없음) — 설계 12절에서 선택. 아직 넣지 않음
-- 단위 테스트: pnpm test (= vitest run, tests/unit·tests/api·tests/script. tests/script는 T1-8 구현 때 추가)
-- E2E 테스트: pnpm test:e2e (= playwright test. 1단계 3차에서 설정 예정, Chromium만)
+- 단위 테스트: pnpm test (= vitest run, tests/unit·tests/api·tests/script)
+- E2E 테스트: pnpm test:e2e -- --trace off (= playwright test, 포트 3100, Chromium은 /opt/pw-browsers/chromium 또는 PW_CHROMIUM_PATH)
 - 빌드: pnpm build
 - 개발 서버: pnpm dev → http://127.0.0.1:3000
 
