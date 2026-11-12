@@ -176,9 +176,12 @@ export function PlanUsagePanel({ plan }: { plan: PlanUsageView | null }) {
   );
 }
 
-/** 사무실 바닥 맨 위 계기판. 상단 영역과 같은 값이라 aria-hidden(스크린 리더 중복 방지) */
+/**
+ * 사무실 바닥 맨 위 계기판. 상단 영역과 같은 값이라 aria-hidden(스크린 리더 중복 방지).
+ * 두 창 모두 없음이어도 "5h – · 7d –"로 그린다(T1-5 "없음 상태도 보인다", QA-01). 응답 전(null)만 숨긴다.
+ */
 export function PlanUsageMini({ plan }: { plan: PlanUsageView | null }) {
-  if (!plan || bothNone(plan)) return null;
+  if (!plan) return null;
   return (
     <div className={s.mini} aria-hidden="true" data-testid="plan-mini">
       {WINDOWS.map(({ name, short }) => {

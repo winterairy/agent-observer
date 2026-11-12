@@ -27,7 +27,7 @@ test.afterAll(async () => {
   await page.close();
 });
 
-test('1. 없음: 받은 값이 없으면 "플랜 사용량 정보 없음"과 설정 안내, 계기판 없음', async () => {
+test('1. 없음: 받은 값이 없으면 "플랜 사용량 정보 없음"과 설정 안내, 계기판은 두 창 모두 –', async () => {
   await expect(panel(page).getByRole('heading', { name: '플랜 사용량 정보 없음' })).toBeVisible();
   await expect(panel(page)).toContainText('Claude 구독 계정(Pro·Max 로그인)에서만 값이 있습니다');
   await expect(panel(page)).toContainText('statusLine 스크립트를 설치하면');
@@ -35,7 +35,13 @@ test('1. 없음: 받은 값이 없으면 "플랜 사용량 정보 없음"과 설
   await expect(panel(page)).not.toContainText('0%');
   await page.locator('[data-row-link]').first().click();
   await expect(page.getByTestId('office-floor')).toBeVisible();
-  await expect(mini(page)).toHaveCount(0);
+  // QA-01: 두 창 모두 없음이어도 계기판을 "5h – · 7d –"로 그린다(T1-5)
+  await expect(mini(page)).toBeVisible();
+  for (const w of ['five_hour', 'seven_day']) {
+    await expect(mini(page).locator(`[data-window="${w}"]`)).toHaveAttribute('data-status', 'none');
+    await expect(mini(page).locator(`[data-window="${w}"]`)).toContainText('–');
+  }
+  await expect(mini(page)).not.toContainText('0%');
 });
 
 test('2. 만료: 지난 resets_at → "초기화됨 — 다음 작업 때 갱신", 숫자 없음, 다른 창은 "정보 없음"', async ({ request }) => {
