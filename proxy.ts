@@ -2,7 +2,7 @@
  * 인증 보호(T1-4, 설계 4절 보호 범위 표). Next 16은 proxy.ts(Node 런타임 기본).
  *
  * | 경로 | 보호 |
- * | /api/events | 통과. route에서 Bearer 검사 |
+ * | /api/events, /api/plan-usage/report | 통과. route에서 Bearer 검사(쿠키는 보지 않음) |
  * | /api/auth/login, /api/auth/logout, /login, /_next/static/*, /_next/image/*, /favicon.ico | 공개 |
  * | /api/* 나머지 | 쿠키 없거나 무효 → 401 JSON. Bearer 헤더는 무시(D-16) |
  * | 그 외 화면 경로 | 쿠키 없거나 무효 → /login?next=<경로> 로 302 |
@@ -12,7 +12,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { readCookie, verifySessionCookieValue } from '@/auth/cookie';
 
-const PUBLIC_EXACT = new Set(['/api/events', '/api/auth/login', '/api/auth/logout', '/login', '/favicon.ico']);
+const PUBLIC_EXACT = new Set(['/api/events', '/api/plan-usage/report', '/api/auth/login', '/api/auth/logout', '/login', '/favicon.ico']);
 const PUBLIC_PREFIX = ['/_next/static/', '/_next/image'];
 
 export function isPublicPath(pathname: string): boolean {

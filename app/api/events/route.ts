@@ -3,36 +3,18 @@
  * 처리 순서: 메서드 → Bearer → 크기(Content-Length, 스트림 16KB) → JSON → zod 검증 → 저장.
  * 응답·로그에 토큰 값, payload 값, 스택을 넣지 않는다.
  */
-import { checkBearer, SERVER_TOKEN_INVALID_MESSAGE } from '@/auth/token';
 import { ingest } from '@/collect/ingest';
-import { config } from '@/config';
-import { json, methodNotAllowed as notAllowed, readLimited, TooLarge } from '@/http/response';
+import { readCollectBody } from '@/http/collect';
+import { json, methodNotAllowed as notAllowed } from '@/http/response';
 import { getStore } from '@/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request): Promise<Response> {
-  const auth = checkBearer(req.headers.get('authorization'), process.env.OBSERVER_TOKEN);
-  if (auth === 'server_token_invalid') {
-    return json(401, { error: 'server_token_invalid', message: SERVER_TOKEN_INVALID_MESSAGE });
-  }
-  if (auth !== 'ok') return json(401, { error: 'unauthorized' });
-
-  const declared = req.headers.get('content-length');
-  if (declared !== null && Number(declared) > config.maxBodyBytes) {
-    return json(413, { error: 'payload_too_large' });
-  }
-
-  let raw: unknown;
-  try {
-    const bytes = await readLimited(req, config.maxBodyBytes);
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    raw = JSON.parse(text);
-  } catch (e) {
-    if (e instanceof TooLarge) return json(413, { error: 'payload_too_large' });
-    return json(400, { error: 'invalid_payload', message: '본문이 JSON이 아닙니다', issues: [] });
-  }
+  const body = await readCollectBody(req);
+  if (!body.ok) return body.response;
+  const raw = body.raw;
 
   try {
     const result = await ingest(getStore(), raw, Date.now());
