@@ -15,9 +15,9 @@
 | ★승인1 | 완료 | 사용자 | | 승인 후 마일스톤·스테이지 이슈 생성 |
 | 디자인 명세 | 완료 (승인됨) | designer | DESIGN.md, docs/team/design-spec-stage1.md | |
 | 개발 | 완료 | developer | | |
-| QA | 진행 | qa | | |
-| 보안 | 진행 | security | | |
-| 디자인 리뷰 | 진행 | designer | | |
+| QA | 완료 (PASS, Low 2) | qa | | |
+| 보안 | 반려(1회) — SEC-01 High 수정 중 | security | | |
+| 디자인 리뷰 | 완료 (PASS, Low 2) | designer | | |
 | 운영 | 대기 | devops | | |
 | 문서 반영 | 대기 | planner | | |
 | ★승인2 | 대기 | 사용자 | | |

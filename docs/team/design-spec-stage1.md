@@ -315,7 +315,7 @@ BOT 목록 (h3 "BOT ({N})")
   승인 대기 ...
   ```
   - 1280(바닥 안쪽 약 336px): 두 막대 한 줄 나란히, 각 막대 폭 = 남은 공간. 390(안쪽 약 334px): 같은 한 줄. 300px 미만이면 위아래 두 줄.
-  - 상태: normal 아이콘 없음 / near 원 안 ! + meter-near / reached 삼각형 안 ! + meter-reached / expired 빈 막대 + 속 빈 원 / none 빈 막대 + "–" / 두 창 모두 none이면 띠 없음 / 첫 로딩은 띠 없음.
+  - 상태: normal 아이콘 없음 / near 원 안 ! + meter-near / reached 삼각형 안 ! + meter-reached / expired 빈 막대 + 속 빈 원 / none 빈 막대 + "–" / 두 창 모두 none이어도 띠를 그리고 두 막대 모두 none / 첫 로딩은 띠 없음.
   - 접근성: `aria-hidden="true"`. 이유: 상단 띠(3.9)에 같은 값이 텍스트와 `role="meter"`로 이미 있어 다시 읽으면 중복이고, 사무실 목록(`<ul aria-label="임시 사무실">`)은 BOT 정보만 담는다. 포커스 대상 아님(Tab 순서 변화 없음).
 - 빈 구역은 구역 이름 옆에 "없음"(caption, muted). 세 구역이 모두 비면(모두 종료) "모든 BOT이 종료되었습니다".
 - 캐릭터: `characters[characterId].ok === true`면 그림 프레임, 아니면 사각형. 그림 로딩 실패(`onerror`)도 사각형으로. 프레임은 `frameWidth×frameHeight`를 40px 높이에 맞춰 정수 배율로 축소/확대(`image-rendering: pixelated`), 칸 너비는 80px 고정.
