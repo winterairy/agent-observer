@@ -15,7 +15,7 @@ project are under a separate restrictive license and are not included here.
 
 | File in this project | Derived from | What was taken |
 |---|---|---|
-| (none at the moment) | | The former `src/cost/pricing.ts` row was removed when token/cost code was dropped (2026-11-11 scope change). |
+| `src/characters/roles.ts` (`roleKeyFor`) | `vendor/pixel-agent-desk/src/roleConfig.js` (`roleKeyFor`) | Plugin prefix matching (`plugin:planner` → `planner`). Rewritten in TypeScript; subagent/teammate flags replaced by `agent_type === null → lead`. |
 
 ## Pretendard
 

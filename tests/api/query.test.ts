@@ -13,6 +13,8 @@ import { GET as SESSION } from '../../app/api/sessions/[key]/route';
 import { POST as DISMISS } from '../../app/api/sessions/[key]/dismiss/route';
 import { POST as RESTORE } from '../../app/api/sessions/[key]/restore/route';
 import { GET as SKILLS } from '../../app/api/skills/route';
+import { GET as CHARACTERS } from '../../app/api/characters/route';
+import { GET as CHAR_IMAGE } from '../../app/api/characters/[id]/image/route';
 import { sessionKey, type EventName, type NormalizedEvent } from '@/domain/types';
 import { applyEvent } from '@/state/reducer';
 import { getStore, resetStoreForTests } from '@/store';
@@ -141,7 +143,7 @@ describe.each(kinds)('조회 API ($name)', (kind) => {
     const d = await detail(key);
     expect(d.agents.map((a) => [a.agentKey, a.role, a.displayName, a.status])).toEqual([
       ['__lead__', 'lead', '책임자', 'done'],
-      [A1, 'qa', 'qa', 'done'],
+      [A1, 'qa', 'QA', 'done'],
     ]);
     expect(d.agents[0]).toMatchObject({ agentId: null, currentTool: null, waitingSince: null, stale: false, calledAgents: [{ subagentType: 'qa', count: 1 }] });
     expect(d.agents[1].skills).toEqual([{ skill: 'playwright-cli', count: 1, lastAt: new Date(T0 + 4000).toISOString() }]);
@@ -337,6 +339,24 @@ describe('쿠키 없이 부르면 401(설계 15절 이중 방어)', () => {
     expect((await getStore().getSession(key))?.dismissedAtTs).toBeNull();
   });
 
-  it.todo('GET /api/characters (T1-6, 개발 3차에서 route와 함께 추가)');
-  it.todo('GET /api/characters/[id]/image (T1-6, 개발 3차에서 route와 함께 추가)');
+  it('GET /api/characters: 쿠키 없음·Bearer만·위조 쿠키 → 401, 설정 내용 없음', async () => {
+    process.env.OBSERVER_TOKEN = TOKEN;
+    for (const h of [{}, { authorization: `Bearer ${TOKEN}` }, { cookie: 'obs_session=forged' }] as H[]) {
+      const res = await CHARACTERS(get('/api/characters', h));
+      expect(res.status).toBe(401);
+      const text = await res.text();
+      expect(text).not.toContain('roles');
+      expect(text).not.toContain('characters');
+    }
+  });
+
+  it('GET /api/characters/[id]/image: 쿠키 없음·Bearer만·위조 쿠키 → 401, 그림 바이트 없음', async () => {
+    process.env.OBSERVER_TOKEN = TOKEN;
+    const p = { params: Promise.resolve({ id: 'sample' }) };
+    for (const h of [{}, { authorization: `Bearer ${TOKEN}` }, { cookie: 'obs_session=forged' }] as H[]) {
+      const res = await CHAR_IMAGE(get('/api/characters/sample/image', h), p);
+      expect(res.status).toBe(401);
+      expect(res.headers.get('content-type')).toContain('application/json');
+    }
+  });
 });
