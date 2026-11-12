@@ -1,0 +1,167 @@
+.panel {
+  width: 100%;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+@media (max-width: 767px) {
+  .head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+}
+
+.meters {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.meters > .meter + .meter {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+@media (min-width: 768px) {
+  .meters {
+    grid-template-columns: 1fr 1fr;
+    column-gap: var(--space-5);
+  }
+  .meters > .meter + .meter {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+    border-left: 1px solid var(--color-border);
+    padding-left: var(--space-5);
+  }
+}
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 24px;
+}
+
+.right {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.pct {
+  font-size: var(--text-number-size);
+  line-height: var(--text-number-line);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.track {
+  position: relative;
+  height: 8px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-strong);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+}
+
+.meta {
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.metaPart {
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .sep {
+    display: none;
+  }
+  .metaPart {
+    display: block;
+  }
+}
+
+.expiredMark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.none {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* PlanUsageMini: 사무실(data-office-scope) 안 */
+.mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.miniItem {
+  flex: 1 1 140px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  color: var(--color-ink);
+}
+
+.miniLabel {
+  font-weight: 600;
+}
+
+.miniTrack {
+  flex: 1 1 auto;
+  min-width: 24px;
+  height: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-ink);
+  overflow: hidden;
+  display: block;
+}
+
+.miniPct {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--text-caption-weight);
+  min-width: 2.5em;
+  text-align: right;
+}

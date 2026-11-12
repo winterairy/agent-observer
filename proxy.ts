@@ -11,6 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { readCookie, verifySessionCookieValue } from '@/auth/cookie';
+import { safeNextPath } from '@/auth/nextPath';
 
 const PUBLIC_EXACT = new Set(['/api/events', '/api/plan-usage/report', '/api/auth/login', '/api/auth/logout', '/login', '/favicon.ico']);
 const PUBLIC_PREFIX = ['/_next/static/', '/_next/image'];
@@ -19,11 +20,7 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC_EXACT.has(pathname) || PUBLIC_PREFIX.some((p) => pathname.startsWith(p));
 }
 
-/** `/`로 시작하는 내부 경로만 허용(`//host`, `/\host` 같은 외부 이동 차단) */
-export function safeNextPath(path: string): string {
-  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) return '/';
-  return path;
-}
+export { safeNextPath };
 
 export async function proxy(request: NextRequest): Promise<Response> {
   const { pathname, search } = request.nextUrl;

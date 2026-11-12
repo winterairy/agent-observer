@@ -1,0 +1,143 @@
+.panel {
+  min-width: 0;
+}
+
+/* 바닥: data-office-scope 안은 라이트 값(tokens.css) */
+.floor {
+  background: var(--color-office-floor-a);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  color: var(--color-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  .floor {
+    border: 2px solid var(--color-office-edge);
+  }
+}
+
+.zones {
+  display: flex;
+  flex-direction: column;
+}
+
+.zone + .zone {
+  border-top: 1px dashed var(--color-border);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.zoneLabel {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  margin-bottom: var(--space-2);
+}
+
+.zoneEmpty {
+  font-weight: var(--text-caption-weight);
+}
+
+.cells {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.cell {
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-bottom: var(--space-1);
+}
+
+.box {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.withSprite {
+  border-width: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .working .icon {
+    animation: blink 1.2s ease-out infinite alternate;
+  }
+}
+
+@keyframes blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.6;
+  }
+}
+
+.desk {
+  display: block;
+  width: 40px;
+  height: 8px;
+  background: var(--color-office-furniture);
+}
+
+.deskGap {
+  margin-top: var(--space-2);
+}
+
+.name {
+  max-width: 72px;
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-caption-weight);
+  color: var(--color-ink);
+  margin-top: var(--space-1);
+}
+
+.state {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  color: var(--color-ink-muted);
+}
+
+/* 캐릭터 프레임: 그림 전체를 배율로 키운 뒤 한 칸만 보이게 자른다 */
+.sprite {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  flex: none;
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  image-rendering: pixelated;
+  transform-origin: 0 0;
+  transform: scale(var(--s)) translate(0, var(--y));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sheet {
+    animation: sprite var(--dur) steps(var(--frames)) infinite;
+  }
+}
+
+@keyframes sprite {
+  from {
+    transform: scale(var(--s)) translate(0, var(--y));
+  }
+  to {
+    transform: scale(var(--s)) translate(var(--x-end), var(--y));
+  }
+}

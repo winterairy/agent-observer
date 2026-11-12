@@ -1,0 +1,151 @@
+/*
+ * 디자인 토큰(DESIGN.md frontmatter·2절·10절). 컴포넌트는 이 변수 이름으로만 색·간격·글꼴을 쓴다.
+ * 라이트 값은 :root와 [data-office-scope]에 함께 선언한다 → 사무실 영역은 다크 모드에서도 라이트 값(2.1).
+ * 다크 블록에는 office-*를 다시 선언하지 않는다.
+ */
+:root,
+[data-office-scope] {
+  --color-primary: #a8431d;
+  --color-primary-hover: #8c3714;
+  --color-primary-on: #ffffff;
+  --color-focus-ring: #262a3b;
+  --color-selected-bar: #262a3b;
+  --color-canvas: #f6f2e6;
+  --color-surface: #fffdf7;
+  --color-surface-elevated: #fffdf7;
+  --color-surface-sunken: #ede8d7;
+  --color-surface-selected: #e7e1cb;
+  --color-ink: #262a3b;
+  --color-ink-muted: #5c5949;
+  --color-border: #ddd6bf;
+  --color-border-strong: #8b8570;
+  --color-success: #2a6331;
+  --color-warning: #6e5000;
+  --color-danger: #ae1f40;
+  --color-info: #2a4fbf;
+  --color-status-working-fg: #2a4fbf;
+  --color-status-working-bg: #e7edfc;
+  --color-status-thinking-fg: #7a3592;
+  --color-status-thinking-bg: #f4e9f7;
+  --color-status-waiting-fg: #6e5000;
+  --color-status-waiting-bg: #fbefc6;
+  --color-status-stale-fg: #ae1f40;
+  --color-status-stale-bg: #fbe7eb;
+  --color-status-done-fg: #2a6331;
+  --color-status-done-bg: #e5f2e2;
+  --color-status-ended-fg: #5c5949;
+  --color-status-ended-bg: #ece8da;
+  --color-meter-normal: #8b8570;
+  --color-meter-near: #b86e00;
+  --color-meter-reached: #ae1f40;
+  --color-office-wall: #e9e5ce;
+  --color-office-wall-trim: #cfc8a1;
+  --color-office-floor-a: #d9d5bd;
+  --color-office-floor-b: #bcb797;
+  --color-office-edge: #9d9879;
+  --color-office-accent: #cf6236;
+  --color-office-accent-shade: #a33d1c;
+  --color-office-mustard: #d8c362;
+  --color-office-mustard-light: #f5e0a6;
+  --color-office-plant: #6b8e34;
+  --color-office-plant-light: #a6cb6e;
+  --color-office-furniture: #363b55;
+  --color-office-wood: #8c6d55;
+
+  --shadow-sm: 0 1px 1px rgba(16, 24, 40, 0.02), 0 2px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 1px 1px rgba(16, 24, 40, 0.02), 0 8px 16px -4px rgba(16, 24, 40, 0.08), 0 24px 32px -8px rgba(16, 24, 40, 0.1);
+}
+
+[data-office-scope] {
+  color-scheme: light;
+}
+
+:root {
+  color-scheme: light dark;
+
+  --font-body: var(--font-pretendard), system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-body);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'D2Coding', monospace;
+
+  --text-h1-size: 20px;
+  --text-h1-line: 1.3;
+  --text-h1-weight: 600;
+  --text-h1-tracking: -0.01em;
+  --text-h2-size: 16px;
+  --text-h2-line: 1.4;
+  --text-h2-weight: 600;
+  --text-h2-tracking: -0.005em;
+  --text-h3-size: 14px;
+  --text-h3-line: 1.4;
+  --text-h3-weight: 600;
+  --text-body-size: 14px;
+  --text-body-line: 1.6;
+  --text-body-weight: 400;
+  --text-small-size: 13px;
+  --text-small-line: 1.5;
+  --text-small-weight: 400;
+  --text-caption-size: 12px;
+  --text-caption-line: 1.4;
+  --text-caption-weight: 500;
+  --text-caption-tracking: 0.01em;
+  --text-number-size: 14px;
+  --text-number-line: 1.4;
+  --text-number-weight: 500;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  --header-height: 56px;
+  --content-max: 1440px;
+  --duration: 150ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #f0875a;
+    --color-primary-hover: #f6a27d;
+    --color-primary-on: #1e0f08;
+    --color-focus-ring: #eeeadb;
+    --color-selected-bar: #eeeadb;
+    --color-canvas: #16150f;
+    --color-surface: #1e1c17;
+    --color-surface-elevated: #27251e;
+    --color-surface-sunken: #12110d;
+    --color-surface-selected: #2e2b22;
+    --color-ink: #eeeadb;
+    --color-ink-muted: #aca794;
+    --color-border: #37342a;
+    --color-border-strong: #79735f;
+    --color-success: #8ed39a;
+    --color-warning: #e6c35a;
+    --color-danger: #ff8ea4;
+    --color-info: #93b2ff;
+    --color-status-working-fg: #93b2ff;
+    --color-status-working-bg: #1d2641;
+    --color-status-thinking-fg: #d8a9ec;
+    --color-status-thinking-bg: #33223e;
+    --color-status-waiting-fg: #e6c35a;
+    --color-status-waiting-bg: #383010;
+    --color-status-stale-fg: #ff8ea4;
+    --color-status-stale-bg: #44182a;
+    --color-status-done-fg: #8ed39a;
+    --color-status-done-bg: #1a3220;
+    --color-status-ended-fg: #aca794;
+    --color-status-ended-bg: #2c2a22;
+    --color-meter-normal: #aca794;
+    --color-meter-near: #e6a23c;
+    --color-meter-reached: #ff8ea4;
+    --shadow-sm: none;
+    --shadow-md: none;
+  }
+}
