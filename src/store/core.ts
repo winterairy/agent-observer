@@ -12,6 +12,7 @@ import {
   type PlanUsageState,
   type SessionState,
 } from '@/domain/types';
+import { dict, getOwn, setOwn } from '@/domain/dict';
 import type { PlanMerger, Reducer, SessionFilter, Store } from '@/store/Store';
 
 export const SCHEMA_VERSION = 2;
@@ -26,7 +27,7 @@ export interface StoreData {
 }
 
 export function emptyData(): StoreData {
-  return { schemaVersion: SCHEMA_VERSION, seq: 0, sessions: {}, events: {}, planUsage: emptyPlanUsage() };
+  return { schemaVersion: SCHEMA_VERSION, seq: 0, sessions: dict(), events: dict(), planUsage: emptyPlanUsage() };
 }
 
 export interface RetentionLimits {
@@ -95,21 +96,21 @@ export abstract class CoreStore implements Store {
     return this.write(() => {
       const full: NormalizedEvent = { ...ev, seq: this.data.seq + 1 };
       const key = sessionKey(ev.project, ev.session_id);
-      const prev = this.data.sessions[key];
+      const prev = getOwn(this.data.sessions, key);
       // reducer가 실패하면 seq·상태를 바꾸지 않는다
       const next = fn(prev ? structuredClone(prev) : null, full);
       this.data.seq = full.seq;
-      this.data.sessions[next.key] = next;
-      const list = this.data.events[next.key] ?? [];
+      setOwn(this.data.sessions, next.key, next);
+      const list = getOwn(this.data.events, next.key) ?? [];
       list.push(full);
-      this.data.events[next.key] = pruneEvents(list, this.clock(), this.limits);
+      setOwn(this.data.events, next.key, pruneEvents(list, this.clock(), this.limits));
       return structuredClone(next);
     });
   }
 
   getSession(key: string): Promise<SessionState | null> {
     return this.read(() => {
-      const s = this.data.sessions[key];
+      const s = getOwn(this.data.sessions, key);
       return s ? structuredClone(s) : null;
     });
   }
@@ -129,21 +130,21 @@ export abstract class CoreStore implements Store {
 
   recentEvents(key: string, limit: number): Promise<NormalizedEvent[]> {
     return this.read(() => {
-      const list = this.data.events[key] ?? [];
+      const list = getOwn(this.data.events, key) ?? [];
       return structuredClone(list.slice(Math.max(0, list.length - limit)));
     });
   }
 
   dismiss(key: string, now: number): Promise<void> {
     return this.write(() => {
-      const s = this.data.sessions[key];
+      const s = getOwn(this.data.sessions, key);
       if (s) s.dismissedAtTs = now;
     });
   }
 
   restore(key: string, now: number): Promise<void> {
     return this.write(() => {
-      const s = this.data.sessions[key];
+      const s = getOwn(this.data.sessions, key);
       if (!s) return;
       s.dismissedAtTs = null;
       s.restoredAtTs = now;
@@ -170,7 +171,7 @@ export abstract class CoreStore implements Store {
   protected pruneAll(now: number): void {
     for (const key of Object.keys(this.data.events)) {
       const kept = pruneEvents(this.data.events[key], now, this.limits);
-      if (kept.length) this.data.events[key] = kept;
+      if (kept.length) setOwn(this.data.events, key, kept);
       else delete this.data.events[key];
     }
   }

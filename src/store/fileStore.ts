@@ -11,6 +11,7 @@ import path from 'node:path';
 import { config } from '@/config';
 import { emptyPlanUsage } from '@/domain/types';
 import { CoreStore, SCHEMA_VERSION, emptyData, type CoreStoreOptions, type StoreData } from '@/store/core';
+import { toDict } from '@/domain/dict';
 
 export interface FileStoreOptions extends CoreStoreOptions {
   dataDir: string;
@@ -77,8 +78,8 @@ export class FileStore extends CoreStore {
         this.data = {
           schemaVersion: SCHEMA_VERSION,
           seq: parsed.seq ?? 0,
-          sessions: parsed.sessions,
-          events: parsed.events,
+          sessions: toDict(parsed.sessions),
+          events: toDict(parsed.events),
           planUsage: { ...emptyPlanUsage(), ...parsed.planUsage },
         };
       } else {

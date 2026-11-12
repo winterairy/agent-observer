@@ -10,6 +10,7 @@ import { config } from '@/config';
 import { calledAgents, skillSummary } from '@/aggregate/totals';
 import { LEAD_KEY, type AgentStatus, type SessionState } from '@/domain/types';
 import { effectiveStatus, sessionStatus } from '@/state/status';
+import { getOwn } from '@/domain/dict';
 
 export interface RoleInfo {
   /** 역할 키(합계·캐릭터 매핑 기준) */
@@ -202,7 +203,7 @@ export function sessionDetailView(s: SessionState, ctx: ViewContext): SessionDet
       waitingSince: e.status === 'waiting' ? iso(e.waitingSinceTs) : null,
       stale: e.stale,
       lastEventAt: new Date(a.lastEventTs).toISOString(),
-      skills: Object.entries(s.skills[agentKey] ?? {})
+      skills: Object.entries(getOwn(s.skills, agentKey) ?? {})
         .map(([skill, r]) => ({ skill, count: r.count, lastAt: new Date(r.lastTs).toISOString() }))
         .sort((x, y) => y.count - x.count || x.skill.localeCompare(y.skill)),
       calledAgents: calledAgents(s, agentKey),

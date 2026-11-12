@@ -231,3 +231,16 @@ R-16: 1차 '단가 확인 결과'·'설계와 달라진 점 1, 2, 6'과 Haiku �
 - 캐릭터 설정 캐시(Map)는 지우지 않는다(파일 수만큼, 작음).
 - `profile.md` "명령" 절의 E2E 항목("1단계 3차에서 설정 예정")과 `tests/script` 문구 갱신은 `.claude/` 수정 금지라 하지 않았다. 책임자가 갱신해 주세요.
 - 실제 Claude Code 세션의 `CLAUDE_PROJECT_DIR`·한가할 때 stdin, 휴대폰 확인은 `[사용자 확인]`으로 남는다.
+
+## 1단계 검증 이슈 수정
+
+### SEC-01 (High) 프로토타입 오염
+- 원인: `sessions`·`events`·`agents`·`skills`·`agentCalls`가 일반 객체이고 외부 문자열을 키로 그대로 읽고 썼다.
+- 수정: `src/domain/dict.ts`를 추가했다. `dict()`(프로토타입 없는 객체), `getOwn`(`Object.hasOwn`으로 자기 속성만), `setOwn`(`defineProperty`로 써서 `__proto__` setter를 거치지 않음), `toDict`(JSON에서 읽은 객체를 옮김).
+  - `src/state/reducer.ts`: 새 세션의 세 맵을 `dict()`로 만들고, 에이전트·스킬·BOT 호출 읽기·쓰기를 getOwn/setOwn으로 바꿨다.
+  - `src/store/core.ts`: sessions·events 읽기·쓰기, dismiss·restore(경로 key)·getSession·recentEvents를 getOwn/setOwn으로 바꿨다.
+  - `src/store/fileStore.ts`: 읽을 때 sessions·events를 `toDict`로 옮긴다. 저장 형식(JSON)은 그대로라 기존 state.json과 호환된다.
+  - `src/aggregate/totals.ts`(byRole·agents·agentCalls), `src/query/views.ts`(skills), `src/characters/roles.ts`(roles·characters 출력), `src/ui/Office.tsx`(characterId 조회, `constructor` 같은 id 방지)도 같은 방식으로 바꿨다.
+- 왜 Map이 아니라 helper인가: `structuredClone`·`JSON.parse`는 결과를 일반 객체로 만들기 때문에 null-prototype만으로는 부족하다. 타입(`Record`)과 저장 형식을 바꾸지 않고, 접근을 항상 자기 속성으로 제한하는 쪽이 범위가 작고 확실하다.
+- 스키마 결정: `/api/events`·`/api/plan-usage/report`는 세 값을 **거부하지 않고 그대로 저장한다**. `skill`·`subagent_type`은 모델 입력에서 오므로 400으로 막으면 이벤트 하나 때문에 상태 기록이 빠진다(D-21 정신: 수집이 끊기지 않게). 근본 원인인 맵 접근을 고쳤으므로 이중 방어는 두지 않았다. 플랜 schema는 외부 문자열을 키로 쓰지 않는다(창 이름은 고정 목록).
+- 테스트: `tests/api/protoKeys.test.ts`(memory·file 각 3개). 세 값을 agent_id·agent_type·skill·subagent_type·session_id·project·tool, dismiss/restore/상세 경로 key로 보낸 뒤 로그인 204·`/api/sessions` 200·상세·스킬 200, `({}).status` 등 undefined, Object.prototype 속성 목록 불변, 값이 그대로 저장됨, fileStore 다시 읽기를 확인한다. 수정 전 코드로 돌리면 6개 모두 실패한다.

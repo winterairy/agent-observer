@@ -10,6 +10,7 @@
  * 파일 mtime이 바뀌면 다시 읽는다(D-20: 새로고침으로 반영). 오류는 서버 로그에만 남기고 응답에는 넣지 않는다.
  */
 import fs from 'node:fs';
+import { setOwn } from '@/domain/dict';
 import path from 'node:path';
 import { z } from 'zod';
 import type { RoleInfo, RoleResolver } from '@/query/views';
@@ -177,9 +178,9 @@ export function charactersView(env: NodeJS.ProcessEnv = process.env): Characters
   const ids = new Set<string>();
   for (const key of Object.keys(roles)) {
     const info = roleInfoFor(key === 'lead' ? null : key, roles);
-    out.roles[key] = { displayName: info.displayName, characterId: info.characterId };
+    setOwn(out.roles, key, { displayName: info.displayName, characterId: info.characterId });
     if (info.characterId) ids.add(info.characterId);
   }
-  for (const id of ids) out.characters[id] = characterView(id, loadCharacter(id, env));
+  for (const id of ids) setOwn(out.characters, id, characterView(id, loadCharacter(id, env)));
   return out;
 }

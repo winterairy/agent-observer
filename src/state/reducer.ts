@@ -12,6 +12,7 @@ import {
   type NormalizedEvent,
   type SessionState,
 } from '@/domain/types';
+import { dict, getOwn, setOwn } from '@/domain/dict';
 
 export function agentKeyOf(agentId: string | null): string {
   return agentId ?? LEAD_KEY;
@@ -30,9 +31,9 @@ function newSession(ev: NormalizedEvent): SessionState {
     dismissedAtTs: null,
     restoredAtTs: null,
     lastEventTs: ev.tsMs,
-    agents: {},
-    skills: {},
-    agentCalls: {},
+    agents: dict(),
+    skills: dict(),
+    agentCalls: dict(),
   };
 }
 
@@ -120,11 +121,10 @@ export function applyEvent(prev: SessionState | null, ev: NormalizedEvent): Sess
 
   // 대상 에이전트(R12: 처음 보는 agent_id면 만든다)
   const key = agentKeyOf(ev.agent_id);
-  let agent = s.agents[key];
+  let agent = getOwn(s.agents, key);
   const isNew = !agent;
   if (!agent) {
-    agent = newAgent(ev.agent_id, ev.agent_type, ev);
-    s.agents[key] = agent;
+    agent = setOwn(s.agents, key, newAgent(ev.agent_id, ev.agent_type, ev));
   } else if (ev.agent_id !== null && ev.agent_type && !agent.agentType) {
     agent.agentType = ev.agent_type;
   }
@@ -152,14 +152,14 @@ export function applyEvent(prev: SessionState | null, ev: NormalizedEvent): Sess
   // 스킬·BOT 호출 기록(PreToolUse만. PostToolUse에도 같은 필드가 와서 두 번 세지 않게)
   if (ev.event === 'PreToolUse') {
     if (ev.tool === 'Skill' && ev.skill) {
-      const bySkill = (s.skills[key] ??= {});
-      const rec = (bySkill[ev.skill] ??= { count: 0, lastTs: ev.tsMs });
+      const bySkill = getOwn(s.skills, key) ?? setOwn(s.skills, key, dict());
+      const rec = getOwn(bySkill, ev.skill) ?? setOwn(bySkill, ev.skill, { count: 0, lastTs: ev.tsMs });
       rec.count += 1;
       rec.lastTs = Math.max(rec.lastTs, ev.tsMs);
     }
     if ((ev.tool === 'Agent' || ev.tool === 'Task') && ev.subagent_type) {
-      const calls = (s.agentCalls[key] ??= {});
-      calls[ev.subagent_type] = (calls[ev.subagent_type] ?? 0) + 1;
+      const calls = getOwn(s.agentCalls, key) ?? setOwn(s.agentCalls, key, dict());
+      setOwn(calls, ev.subagent_type, (getOwn(calls, ev.subagent_type) ?? 0) + 1);
     }
   }
 

@@ -47,7 +47,7 @@ interface SpriteInfo {
 
 /** 캐릭터 설정이 있고(ok:true) 이 상태의 동작(대체 포함)이 있으면 프레임 정보, 아니면 null(사각형) */
 function spriteFor(a: AgentView, characters: CharactersView | null): SpriteInfo | null {
-  const ch = a.characterId && characters ? characters.characters[a.characterId] : undefined;
+  const ch = a.characterId && characters && Object.hasOwn(characters.characters, a.characterId) ? characters.characters[a.characterId] : undefined;
   if (!ch || !ch.ok) return null;
   const act = ch.actions[`${actionOf(a)}_down`];
   if (!act) return null;

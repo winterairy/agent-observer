@@ -2,6 +2,9 @@
  * payload v1 검증(설계 5절 POST /api/events). zod 기본 strip 모드라 정의하지 않은 키
  * (prompt, tool_input, tool_response, message 등)는 결과에 남지 않는다.
  * `usage`·`subagent`(토큰)도 스키마에 없어 어떤 형식으로 와도 검사 없이 버려진다(D-21).
+ *
+ * `__proto__`·`constructor`·`prototype` 값은 거부하지 않고 그대로 받는다(SEC-01). 모델이 만든 스킬 이름 하나로
+ * 수집이 끊기지 않게 하려는 것이다(D-21 정신). 안전성은 저장소·reducer의 맵 접근(`@/domain/dict`)이 보장한다.
  */
 import { z } from 'zod';
 import { config } from '@/config';
