@@ -118,3 +118,45 @@
 - T1-6: `characters/roles.ts`의 `roleKeyFor`로 `RoleResolver`를 만들어 조회 route의 `ctx.roles`에 넘긴다. `/api/characters`, `/api/characters/[id]/image`에 `requireSession`을 넣고 `tests/api/query.test.ts`의 todo 2개를 실제 테스트로 바꾼다.
 - 플랜 사용량 기능은 기획·설계 확정 후. 토큰·비용 코드(`cost/`, `aggregate/totals.ts`의 합계 함수, 1차 테스트) 제거는 따로 지시받는다.
 - Playwright E2E, observe.mjs 통합 테스트(T1-7).
+
+## 개발 3차-가 (2026-11-12): 토큰·비용 제거, 플랜 사용량 서버
+
+범위: 설계 16절 R-1~R-15, T1-8 (나) 서버 저장·조회 API, 설계 6.6 서버 단위·API 테스트. 화면·캐릭터·E2E·statusline.mjs·tests/script는 3차-나 이후.
+
+R-16: 1차 '단가 확인 결과'·'설계와 달라진 점 1, 2, 6'과 Haiku 단가 제한은 범위 변경으로 폐기한다. 2차 "다음 차수에 넘길 것"의 토큰·비용 코드 제거 항목은 이번에 끝났다.
+
+구현
+| 파일 | 내용 |
+|---|---|
+| `src/cost/`, `src/state/usage.ts`, `tests/unit/cost.test.ts` | 삭제. 스킬·BOT 호출 기록 테스트 3개는 `tests/unit/skills.test.ts`로 옮김 |
+| `src/aggregate/totals.ts` | 합계 함수 삭제. `RoleOf`, `defaultRoleOf`, `skillUses`, `skillSummary`, `calledAgents`만 남김 |
+| `src/domain/types.ts` | `Usage`, `SubagentInfo`, `Totals` 계열, `emptyUsage` 삭제. `PLAN_WINDOW_NAMES`, `PlanWindowState`, `PlanUsageState`, `PlanWindowReport`, `PlanReport`, `emptyPlanUsage` 추가 |
+| `src/collect/schema.ts`, `src/state/reducer.ts` | `usage`·`subagent` 스키마와 처리 블록 삭제(D-21: 어떤 형식이어도 400 없이 버림, subagent로 에이전트를 만들지 않음) |
+| `src/store/*` | `SCHEMA_VERSION = 2`, `StoreData.planUsage`, `getPlanUsage`·`applyPlanUsage`(뮤텍스 안 읽기-병합-쓰기, 병합 함수가 실패하면 저장값 불변). 버전이 다르거나 깨진 JSON이면 변환 없이 `.bak-<시각>`으로 옮기고 빈 상태. 로그는 "schemaVersion <n> 파일을 백업하고 새로 시작" |
+| `src/plan/schema.ts` | 6.3 검증. 두 창 모두 없으면 `issues: ["rate_limits"]` |
+| `src/plan/merge.ts` | D-27 `mergePlanWindow`·`mergePlanUsage`(60초 이하 같은 창, 경계 포함) |
+| `src/plan/view.ts` | `planUsageView(state, now, opts)` → `{now, windows}`. status ok/expired/none, level normal/near/reached, expired면 level null |
+| `src/http/collect.ts` | Bearer → 16KB → JSON 앞단을 묶어 `/api/events`와 `/api/plan-usage/report`가 같이 씀(6.3 "같은 helper"). `/api/events` 동작 그대로 |
+| `app/api/plan-usage/report/route.ts`, `app/api/plan-usage/route.ts` | 6.3·6.4. 405는 `Allow` 헤더 포함 |
+| `proxy.ts` | `PUBLIC_EXACT`에 `/api/plan-usage/report`, 머리 주석 표 갱신 |
+| `src/config.ts` | `planWarnPercent` 80, `planReachedPercent` 100, `planSameWindowSec` 60 |
+| `THIRD_PARTY_NOTICES.md` | pricing.ts 행 삭제. 표가 비어 "(none at the moment)" 한 줄을 둠 |
+
+검증
+- `pnpm typecheck` 통과, `pnpm test` 347개 통과 + todo 2개(10개 파일). 이번 추가: `tests/unit/planUsage.test.ts` 34, `tests/api/planUsage.test.ts` 61(memory·file + proxy), `tests/unit/store.test.ts` 플랜 사용량 6(3×2 구현), `tests/api/events.test.ts` usage·subagent 202 테스트.
+- `pnpm build` 통과(`/api/plan-usage`, `/api/plan-usage/report` 인식).
+- `grep -rn "usage|Usage|cost|pricing|PRICING|Totals" src app`: `KeyUsage`(cookie.ts), 주석의 "usage는 버린다" 설명 2곳, 플랜 사용량 이름(`planUsage`, `PlanUsageState` 등)만 남음.
+
+### 설계와 달라진 점과 이유
+1. `PlanWindowReport` 타입과 `PLAN_WINDOW_NAMES`, `emptyPlanUsage()`를 더했다. 설계 2절 `PlanReport.windows`의 값 타입을 병합 함수 인자로 다시 쓰고, 창 목록을 한곳에 두기 위해서다(동작 변화 없음).
+2. 같은 창 판정 60초, 경고 80%·도달 100%를 `src/config.ts` 상수로 두었다(설계 11절 "상수 한곳"). `SAME_WINDOW_SEC`는 merge.ts에서 그 값을 내보낸다.
+3. `GET /api/plan-usage`에 GET 외 메서드 405 핸들러를 넣었다(설계 6.4 "405(GET 외)"). 기존 조회 route들은 Next 기본 405에 맡기고 있어 손대지 않았다.
+
+### 알려진 제한
+- 플랜 사용량 병합은 계정을 구분하지 않는다(D-28). 다른 계정 값은 D-27 규칙으로 섞일 수 있다.
+- schemaVersion 1 백업 파일(`.data/state.json.bak-*`)에는 옛 토큰 값이 남는다. 자동으로 지우지 않는다(설계 3절). README 안내 문구는 이번에 넣지 않았다(3차-나 README 갱신 때).
+
+### 3차-나에 넘길 것
+- 화면: 3초 폴링에 `GET /api/plan-usage`를 더하고 응답 `now` 기준으로 남은 시간·"마지막 측정 N분 전" 계산(6.5). 상단 영역과 임시 사무실 계기판이 같은 응답을 쓴다.
+- README: "`.data/state.json.bak-*`는 지워도 된다" 안내, 현재 구현 범위에 플랜 사용량 API 추가.
+- `tests/script/statusline.test.ts`(설치 사본이 들어온 뒤), Playwright `e2e/plan-usage-screen.spec.ts`(실제 서버에 report를 보내 만든다).
