@@ -170,5 +170,9 @@
       "Bash(gh release create *)",
       "Bash(gh pr merge *)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/team/observe/statusline.mjs\""
   }
 }

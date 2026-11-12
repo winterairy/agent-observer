@@ -17,6 +17,7 @@
     "team/checklists/security-node-cli.md": "680da2daa13b3602165ce1c0ae9df893e968415a1775ea9175f8808258093008",
     "team/checklists/security-web.md": "fc4eb5eadacd11209787942969e3bfcccfe3acfd42e9585031ceb5a9c73b2dde",
     "team/observe/observe.mjs": "1ba7e501de757446ff9b75f2487f2ba46230a4eeddd2392faa925adc74b4acd1",
+    "team/observe/statusline.mjs": "74107e02d6846d25abb1f751e23648430fac3aecca11aa10eb2568666703b53b",
     "team/process.md": "b2e620e152f4f109953177c523e487084f106014f88b97e6ba298f984c0046d5",
     "team/profile.template.md": "050e2c9ffd7cc25f8a47d00a55225f9881d77a5009a798aafe54f9f7921329ba",
     "team/templates/DESIGN.md": "03d5a40eb791cfb509849575236de5c6e47a195683d633a7048b130089a759f6",
