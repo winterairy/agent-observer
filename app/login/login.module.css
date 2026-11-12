@@ -56,7 +56,9 @@
   border-color: var(--color-focus-ring);
 }
 
-.inputError {
+/* 오류 상태는 포커스 중에도 테두리를 danger로 둔다. 바깥 링은 전역 :focus-visible(focus-ring) (DES-01) */
+.inputError,
+.inputError:focus-visible {
   border-color: var(--color-danger);
 }
 

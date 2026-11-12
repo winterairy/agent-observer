@@ -186,6 +186,16 @@ test('쿠키가 없어지면 다음 폴링에서 /login?next=… 로 이동, 로
   await expect(page.getByText('비밀번호가 맞지 않습니다.')).toBeVisible();
   await expect(page.getByLabel('비밀번호')).toHaveValue('');
   await expect(page.getByLabel('비밀번호')).toBeFocused();
+  // DES-01: 포커스 중에도 오류 테두리는 danger
+  const [border, danger] = await page.getByLabel('비밀번호').evaluate((el) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--color-danger)';
+    document.body.append(probe);
+    const d = getComputedStyle(probe).color;
+    probe.remove();
+    return [getComputedStyle(el).borderTopColor, d];
+  });
+  expect(border).toBe(danger);
   await expect(page.getByText('OBSERVER_PASSWORD가 설정되어 있어야', { exact: false })).toBeVisible();
   await page.getByLabel('비밀번호').fill(process.env.E2E_PASSWORD as string);
   await page.getByRole('button', { name: '로그인' }).click();
