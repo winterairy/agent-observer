@@ -46,6 +46,12 @@ export const config = {
   fileWriteDebounceMs: 250,
   /** fileStore 전체 prune 주기 */
   pruneIntervalMs: HOUR,
+  /** D-30 플랜 사용량 경고(한도 가까움) 기준 % */
+  planWarnPercent: 80,
+  /** D-30 플랜 사용량 한도 도달 기준 % */
+  planReachedPercent: 100,
+  /** D-27 resets_at 차이가 이 값(초) 이하면 같은 창 */
+  planSameWindowSec: 60,
 } as const;
 
 export type Config = typeof config;

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { sessionKey } from '@/domain/types';
+import { mergePlanUsage } from '@/plan/merge';
 import { applyEvent } from '@/state/reducer';
 import { createFileStore, FileStore } from '@/store/fileStore';
 import { createMemoryStore } from '@/store/memoryStore';
@@ -132,6 +133,38 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
     await store.prune(T0 + 14 * DAY_MS);
     expect(await store.recentEvents(s.key, 10)).toEqual([]);
     expect(await store.getSession(s.key)).not.toBeNull();
+  });
+
+  it('플랜 사용량: 처음엔 둘 다 null, applyPlanUsage는 병합 결과를 저장하고 복사본을 돌려준다', async () => {
+    const store = await make();
+    expect(await store.getPlanUsage()).toEqual({ five_hour: null, seven_day: null });
+    const r = await store.applyPlanUsage({ remote: false, windows: { five_hour: { usedPercentage: 42, resetsAtSec: 1_800_000_000 } } }, T0, mergePlanUsage);
+    r.five_hour!.usedPercentage = 99;
+    expect(await store.getPlanUsage()).toEqual({
+      five_hour: { usedPercentage: 42, resetsAtSec: 1_800_000_000, receivedTs: T0, remote: false },
+      seven_day: null,
+    });
+  });
+
+  it('플랜 사용량: 동시에 온 보고도 뮤텍스로 직렬화돼 D-27 결과가 순서와 무관하다', async () => {
+    const store = await make();
+    const pcts = [42, 38, 50, 12, 47];
+    await Promise.all(
+      pcts.map((p, i) =>
+        store.applyPlanUsage({ remote: false, windows: { five_hour: { usedPercentage: p, resetsAtSec: 1_800_000_000 + i } } }, T0 + i, mergePlanUsage),
+      ),
+    );
+    expect((await store.getPlanUsage()).five_hour).toMatchObject({ usedPercentage: 50, resetsAtSec: 1_800_000_004 });
+  });
+
+  it('플랜 사용량: 병합 함수가 실패하면 저장값을 바꾸지 않는다', async () => {
+    const store = await make();
+    await expect(
+      store.applyPlanUsage({ remote: false, windows: {} }, T0, () => {
+        throw new Error('x');
+      }),
+    ).rejects.toThrow();
+    expect(await store.getPlanUsage()).toEqual({ five_hour: null, seven_day: null });
   });
 });
 
