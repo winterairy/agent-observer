@@ -17,7 +17,7 @@ import { sessionKey, type EventName, type NormalizedEvent } from '@/domain/types
 import { applyEvent } from '@/state/reducer';
 import { getStore, resetStoreForTests } from '@/store';
 import { FileStore } from '@/store/fileStore';
-import { HOUR, MIN, T0, inc, usage } from '../helpers/events';
+import { HOUR, MIN, T0, inc } from '../helpers/events';
 import { PASSWORD, SECRET, get, login, post, setAuthEnv } from '../helpers/auth';
 
 const TOKEN = `collect-${Math.random().toString(36).slice(2)}-0123456789`;
@@ -131,11 +131,8 @@ describe.each(kinds)('조회 API ($name)', (kind) => {
       ['SubagentStart', { agent_id: A1, agent_type: 'qa' }],
       ['PreToolUse', { agent_id: A1, agent_type: 'qa', tool: 'Skill', skill: 'playwright-cli' }],
       ['PostToolUse', { agent_id: A1, agent_type: 'qa', tool: 'Skill' }],
-      ['SubagentStop', { agent_id: A1, agent_type: 'qa', usage: usage({ output: 100 }) }],
-      [
-        'PostToolUse',
-        { tool: 'Agent', subagent: { agent_id: A1, agent_type: 'qa', status: 'completed', usage: usage({ output: 120 }) } },
-      ],
+      ['SubagentStop', { agent_id: A1, agent_type: 'qa' }],
+      ['PostToolUse', { tool: 'Agent' }],
       ['Stop', {}],
     ];
     let key = '';

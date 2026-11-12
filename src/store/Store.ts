@@ -2,9 +2,12 @@
  * 저장소 인터페이스(설계 3절). 수집·상태 계산 코드는 이 인터페이스만 안다.
  * 2단계에 Postgres·Redis 구현으로 바꿀 때 같은 경계를 쓴다.
  */
-import type { IncomingEvent, NormalizedEvent, SessionState } from '@/domain/types';
+import type { IncomingEvent, NormalizedEvent, PlanReport, PlanUsageState, SessionState } from '@/domain/types';
 
 export type Reducer = (s: SessionState | null, ev: NormalizedEvent) => SessionState;
+
+/** 플랜 사용량 병합 순수 함수(plan/merge.ts의 mergePlanUsage) */
+export type PlanMerger = (prev: PlanUsageState, report: PlanReport, now: number) => PlanUsageState;
 
 export interface SessionFilter {
   project?: string;
@@ -26,4 +29,8 @@ export interface Store {
   restore(key: string, now: number): Promise<void>;
   /** D-4: 세션당 최근 500개, 7일 지난 이벤트 삭제(스냅숏은 유지) */
   prune(now: number): Promise<void>;
+  /** 플랜 사용량(T1-8, 설계 6.4). 받은 적 없으면 {five_hour:null, seven_day:null} */
+  getPlanUsage(): Promise<PlanUsageState>;
+  /** 읽기-병합-쓰기를 뮤텍스 안에서 한 번에 한다(D-27). fn은 순수 함수 */
+  applyPlanUsage(report: PlanReport, now: number, fn: PlanMerger): Promise<PlanUsageState>;
 }

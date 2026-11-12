@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { LEAD_KEY, sessionKey, type AgentState, type SessionState } from '@/domain/types';
 import { applyEvent } from '@/state/reducer';
 import { effectiveStatus, sessionStatus } from '@/state/status';
-import { HOUR, MIN, SEC, T0, ev, last, run, usage } from '../helpers/events';
+import { HOUR, MIN, SEC, T0, ev, last, run } from '../helpers/events';
 
 const A1 = 'A1';
 const lead = (s: SessionState): AgentState => s.agents[LEAD_KEY];
@@ -71,12 +71,7 @@ describe('시나리오 S-01~S-14', () => {
       ev('PreToolUse', { at: t(3), ...sub, tool: 'Bash' }),
       ev('PostToolUse', { at: t(4), ...sub, tool: 'Bash' }),
       ev('SubagentStop', { at: t(5), ...sub }),
-      ev('PostToolUse', {
-        at: t(6),
-        tool: 'Agent',
-        subagent_type: 'qa',
-        subagent: { agent_id: A1, agent_type: 'qa', status: 'completed', usage: usage({ output: 120, model: 'claude-haiku-5-5' }) },
-      }),
+      ev('PostToolUse', { at: t(6), tool: 'Agent', subagent_type: 'qa' }),
       ev('Stop', { at: t(7) }),
     ]);
     expect(steps.map((s) => lead(s).status)).toEqual([
@@ -86,8 +81,6 @@ describe('시나리오 S-01~S-14', () => {
     const end = last(steps);
     expect(Object.keys(end.agents).sort()).toEqual([A1, LEAD_KEY].sort());
     expect(a1(end).agentType).toBe('qa');
-    expect(a1(end).usage.output).toBe(120);
-    expect(lead(end).usage.output).toBe(0);
     expect(end.agentCalls[LEAD_KEY]).toEqual({ qa: 1 });
   });
 
@@ -206,16 +199,16 @@ describe('시나리오 S-01~S-14', () => {
     expect(lead(s).status).toBe('thinking');
   });
 
-  it('S-13c 늦게 온 이벤트도 usage·스킬·세션 lastEventTs는 반영한다', () => {
+  it('S-13c 늦게 온 이벤트도 스킬·세션 lastEventTs는 반영한다', () => {
     const s = last(
       run([
-        ev('Stop', { at: T0 + 10 * SEC, usage: usage({ output: 50 }) }),
+        ev('Stop', { at: T0 + 10 * SEC }),
         ev('PreToolUse', { at: T0, tool: 'Skill', skill: 'lint' }),
-        ev('PostToolUse', { at: T0 + SEC, usage: usage({ output: 80 }) }),
+        ev('PostToolUse', { at: T0 + SEC }),
       ]),
     );
     expect(lead(s).status).toBe('done');
-    expect(lead(s).usage.output).toBe(80);
+    expect(s.lastEventTs).toBe(T0 + 10 * SEC);
     expect(s.skills[LEAD_KEY].lint.count).toBe(1);
   });
 
@@ -419,7 +412,7 @@ describe('기타 규칙', () => {
   it('applyEvent는 입력 세션을 바꾸지 않는다', () => {
     const s = applyEvent(null, ev('Stop'));
     const snapshot = structuredClone(s);
-    applyEvent(s, ev('PreToolUse', { at: T0 + SEC, tool: 'Read', usage: usage({ input: 5 }) }));
+    applyEvent(s, ev('PreToolUse', { at: T0 + SEC, tool: 'Read' }));
     expect(s).toEqual(snapshot);
   });
 });

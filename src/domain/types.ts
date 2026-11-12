@@ -1,5 +1,5 @@
 /**
- * 이벤트·세션·에이전트·합계 타입(설계 2절). 외부 의존 없음.
+ * 이벤트·세션·에이전트·플랜 사용량 타입(설계 2절). 외부 의존 없음.
  */
 
 export const EVENT_NAMES = [
@@ -16,23 +16,6 @@ export const EVENT_NAMES = [
 ] as const;
 
 export type EventName = (typeof EVENT_NAMES)[number];
-
-/** 에이전트별 누적 토큰. 정수 >= 0 */
-export interface Usage {
-  input: number;
-  output: number;
-  cache_creation: number;
-  cache_read: number;
-  model: string | null;
-  messages: number;
-}
-
-export interface SubagentInfo {
-  agent_id: string;
-  agent_type: string | null;
-  status: string | null;
-  usage: Usage;
-}
 
 /** 검증 후 허용 필드만 남긴 이벤트. 이것만 저장한다 */
 export interface NormalizedEvent {
@@ -58,8 +41,6 @@ export interface NormalizedEvent {
   source?: string | null;
   model?: string | null;
   reason?: string | null;
-  usage?: Usage;
-  subagent?: SubagentInfo;
 }
 
 /** 저장소에 넘기는 이벤트(seq는 저장소가 부여) */
@@ -85,8 +66,6 @@ export interface AgentState {
   /** 상태 전이에 반영된 마지막 ts(ms) */
   lastEventTs: number;
   lastSeq: number;
-  /** 누적, 항목별 max */
-  usage: Usage;
   firstSeenTs: number;
 }
 
@@ -121,26 +100,6 @@ export interface SessionState {
   agentCalls: Record<string, Record<string, number>>;
 }
 
-export interface Totals {
-  input: number;
-  output: number;
-  cache_creation: number;
-  cache_read: number;
-  costUsd: number;
-  /** 추정 단가가 하나라도 섞임 */
-  estimated: boolean;
-}
-
-export interface RoleTotal extends Totals {
-  role: string;
-  agents: number;
-}
-
-export interface ProjectTotal extends Totals {
-  project: string;
-  sessions: number;
-}
-
 export interface SkillUse {
   project: string;
   sessionKey: string;
@@ -151,8 +110,40 @@ export interface SkillUse {
   lastTs: number;
 }
 
-export function emptyUsage(): Usage {
-  return { input: 0, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: 0 };
+/** 플랜 사용량 창 이름(T1-8, 설계 6절) */
+export const PLAN_WINDOW_NAMES = ['five_hour', 'seven_day'] as const;
+export type PlanWindowName = (typeof PLAN_WINDOW_NAMES)[number];
+
+export interface PlanWindowState {
+  /** 0~100 */
+  usedPercentage: number;
+  /** Unix epoch 초(원문 단위 그대로) */
+  resetsAtSec: number;
+  /** 이 창이 마지막으로 보고된 서버 수신 시각(ms). D-27: 진 값이 와도 갱신 */
+  receivedTs: number;
+  /** 저장된 값을 보낸 요청이 클라우드 세션이었는지 */
+  remote: boolean;
+}
+
+/** 계정 단위 하나. 세션·프로젝트와 관계없다(D-28) */
+export interface PlanUsageState {
+  five_hour: PlanWindowState | null;
+  seven_day: PlanWindowState | null;
+}
+
+export interface PlanWindowReport {
+  usedPercentage: number;
+  resetsAtSec: number;
+}
+
+/** 검증된 수집 요청(plan/schema 결과). windows는 1개 이상 */
+export interface PlanReport {
+  remote: boolean;
+  windows: Partial<Record<PlanWindowName, PlanWindowReport>>;
+}
+
+export function emptyPlanUsage(): PlanUsageState {
+  return { five_hour: null, seven_day: null };
 }
 
 /** base64url(project + "\n" + session_id). 외부 의존 없이 UTF-8 → base64url */

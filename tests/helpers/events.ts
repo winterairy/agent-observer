@@ -1,5 +1,5 @@
 /** 테스트용 이벤트 생성 도우미. 실제 토큰·수집 데이터는 쓰지 않는다. */
-import type { EventName, IncomingEvent, NormalizedEvent, SessionState, Usage } from '@/domain/types';
+import type { EventName, IncomingEvent, NormalizedEvent, SessionState } from '@/domain/types';
 import { applyEvent } from '@/state/reducer';
 
 export const T0 = Date.parse('2026-11-11T10:00:00.000Z');
@@ -30,10 +30,6 @@ export function ev(
     remote_session_id: null,
     ...rest,
   };
-}
-
-export function usage(p: Partial<Usage> = {}): Usage {
-  return { input: 0, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: 0, ...p };
 }
 
 /** 이벤트를 차례로 적용하고 각 단계의 세션을 돌려준다 */

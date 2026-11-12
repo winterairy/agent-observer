@@ -15,4 +15,4 @@ project are under a separate restrictive license and are not included here.
 
 | File in this project | Derived from | What was taken |
 |---|---|---|
-| `src/cost/pricing.ts` | `vendor/pixel-agent-desk/src/pricing.js` | Cost formula shape (cache read = input price × multiplier, cache write = input price × 1.25, rounding to 5 decimals). Price values were not copied; they were re-checked against Anthropic's public pricing page (see the file header). |
+| (none at the moment) | | The former `src/cost/pricing.ts` row was removed when token/cost code was dropped (2026-11-11 scope change). |

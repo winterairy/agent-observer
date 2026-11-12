@@ -199,9 +199,6 @@ describe.each(kinds)('POST /api/events ($name)', (kind) => {
     ['문자열 257자', { tool: 'x'.repeat(257) }, 'tool'],
     ['remote가 문자열', { remote: 'yes' }, 'remote'],
     ['agent_id가 숫자', { agent_id: 3 }, 'agent_id'],
-    ['usage.output 음수', { usage: { input: 0, output: -1, cache_creation: 0, cache_read: 0, model: null, messages: 0 } }, 'usage.output'],
-    ['usage.input 소수', { usage: { input: 1.5, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: 0 } }, 'usage.input'],
-    ['subagent.agent_id 없음', { subagent: { agent_type: 'qa', status: null, usage: { input: 0, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: 0 } } }, 'subagent.agent_id'],
   ])('%s이면 400이고 저장 안 됨', async (_n, over, issue) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const res = await post(payload(over));
@@ -210,6 +207,37 @@ describe.each(kinds)('POST /api/events ($name)', (kind) => {
     expect(body.error).toBe('invalid_payload');
     expect(body.issues).toContain(issue);
     expect(await sessionCount()).toBe(0);
+  });
+
+  it.each([
+    ['usage.output 음수', { usage: { input: 0, output: -1, cache_creation: 0, cache_read: 0, model: null, messages: 0 } }],
+    ['usage.input 소수', { usage: { input: 1.5, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: 0 } }],
+    ['usage가 문자열', { usage: 'MARK-USAGE-STR' }],
+  ])('%s여도 202이고 usage가 저장되지 않는다(D-21)', async (_n, over) => {
+    const res = await post(payload(over));
+    expect(res.status).toBe(202);
+    const [e] = await getStore().recentEvents(sessionKey('P1', 'sess-1'), 1);
+    expect(e).not.toHaveProperty('usage');
+    const text = await storedText();
+    expect(text).not.toContain('"usage"');
+    expect(text).not.toContain('MARK-USAGE');
+  });
+
+  it.each([
+    ['agent_id 없음', { agent_type: 'qa', status: null, usage: { input: 0, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: 0 } }],
+    ['agent_id 있음', { agent_id: 'MARK-SUB-A9', agent_type: 'qa', status: 'completed', usage: { input: 1, output: 2, cache_creation: 3, cache_read: 4, model: null, messages: 1 } }],
+    ['문자열', 'MARK-SUB-STR'],
+    ['숫자', 42],
+  ])('subagent가 %s이어도 202이고 subagent 키가 없으며 서브에이전트가 생기지 않는다', async (_n, subagent) => {
+    const res = await post(payload({ event: 'PostToolUse', tool: 'Agent', subagent }));
+    expect(res.status).toBe(202);
+    const [e] = await getStore().recentEvents(sessionKey('P1', 'sess-1'), 1);
+    expect(e).not.toHaveProperty('subagent');
+    const s = await getStore().getSession(sessionKey('P1', 'sess-1'));
+    expect(Object.keys(s!.agents)).toEqual(['__lead__']);
+    const text = await storedText();
+    expect(text).not.toContain('"subagent"');
+    expect(text).not.toContain('MARK-SUB');
   });
 
   it('검증 실패 응답·로그에 값이 아니라 경로만 나온다', async () => {
@@ -300,7 +328,32 @@ describe.each(kinds)('POST /api/events ($name)', (kind) => {
     }
     const [e] = await getStore().recentEvents(sessionKey('P1', 'sess-1'), 1);
     expect(e.skill).toBe('playwright-cli');
-    expect(e.usage).toEqual({ input: 1, output: 2, cache_creation: 3, cache_read: 4, model: 'claude-haiku-5-5', messages: 1 });
+    expect(e).not.toHaveProperty('usage');
+    for (const k of ['"usage"', '"cache_read"', '"cache_creation"', '"messages"']) {
+      expect(text).not.toContain(k);
+    }
+  });
+
+  it('subagent.usage가 든 PostToolUse(Agent)도 토큰 수가 저장되지 않는다', async () => {
+    const res = await post(
+      payload({
+        event: 'PostToolUse',
+        tool: 'Agent',
+        subagent_type: 'qa',
+        usage: { input: 1, output: 2, cache_creation: 3, cache_read: 4, model: 'claude-haiku-5-5', messages: 1 },
+        subagent: {
+          agent_id: 'a-sub-1',
+          agent_type: 'qa',
+          status: 'completed',
+          usage: { input: 5, output: 6, cache_creation: 7, cache_read: 8, model: 'claude-haiku-5-5', messages: 2 },
+        },
+      }),
+    );
+    expect(res.status).toBe(202);
+    const text = await storedText();
+    for (const k of ['"usage"', '"subagent"', '"cache_read"', '"cache_creation"', '"messages"', 'a-sub-1']) {
+      expect(text).not.toContain(k);
+    }
   });
 
   it('command 필드(UserPromptExpansion)는 원본 이벤트에 저장된다', async () => {

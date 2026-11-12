@@ -2,7 +2,7 @@
  * 저장소 스냅숏 → 조회 API 응답(DTO) 변환(T1-5, 설계 5절). 순수 함수: 시각은 ctx.now로 받는다.
  * - 상태: state/status의 effectiveStatus·sessionStatus(시간 초과, 승인 대기 시작 시각, 24시간 stale).
  * - 토큰·API 환산 비용(usage·cost·totals·pricing)은 응답에 넣지 않는다(2026-11-11 사용자 범위 변경:
- *   1단계에서 토큰·비용 기능을 빼고 플랜 사용량으로 바꾸는 중. 1차의 cost·aggregate 코드는 지시가 있을 때까지 남긴다).
+ *   1단계에서 토큰·비용 기능을 빼고 플랜 사용량으로 바꿨다).
  * - 역할 매핑: ctx.roles. 기본은 null → lead, 그 외 원문(characters/roles.ts는 T1-6에서 넘긴다).
  * 응답에 토큰·비밀번호·쿠키 비밀값, 내부 경로를 넣지 않는다.
  */

@@ -3,17 +3,15 @@
  * Next.js·fs·Date.now를 쓰지 않는다. 입력 session은 바꾸지 않고 새 객체를 돌려준다.
  *
  * 순서(D-7): 에이전트별 (lastEventTs, lastSeq)보다 이른 이벤트는 상태 전이를 하지 않고
- * usage 병합·스킬 기록·세션 lastEventTs 갱신만 한다(ADR A2).
+ * 스킬 기록·세션 lastEventTs 갱신만 한다(ADR A2).
  */
 import {
   LEAD_KEY,
-  emptyUsage,
   sessionKey,
   type AgentState,
   type NormalizedEvent,
   type SessionState,
 } from '@/domain/types';
-import { mergeUsage } from '@/state/usage';
 
 export function agentKeyOf(agentId: string | null): string {
   return agentId ?? LEAD_KEY;
@@ -47,7 +45,6 @@ function newAgent(agentId: string | null, agentType: string | null, ev: Normaliz
     waitingSinceTs: null,
     lastEventTs: ev.tsMs,
     lastSeq: ev.seq,
-    usage: emptyUsage(),
     firstSeenTs: ev.tsMs,
   };
 }
@@ -150,23 +147,6 @@ export function applyEvent(prev: SessionState | null, ev: NormalizedEvent): Sess
     agent.lastSeq = ev.seq;
     transition(agent, ev, isNew);
     if (ev.event === 'SessionStart' && ev.agent_id === null && ev.model) s.model = ev.model;
-  }
-
-  // usage 병합(늦게 온 이벤트도 반영)
-  if (ev.usage) agent.usage = mergeUsage(agent.usage, ev.usage);
-
-  // 부모의 Agent 도구가 끝났을 때 붙는 subagent.usage → 그 서브에이전트. 부모에는 더하지 않는다
-  if (ev.subagent) {
-    const subKey = agentKeyOf(ev.subagent.agent_id);
-    let sub = s.agents[subKey];
-    if (!sub) {
-      // 상태 전이는 하지 않는다. 부모 도구가 끝난 시점이므로 완료로 만든다
-      sub = newAgent(ev.subagent.agent_id, ev.subagent.agent_type, ev);
-      s.agents[subKey] = sub;
-    } else if (ev.subagent.agent_type && !sub.agentType) {
-      sub.agentType = ev.subagent.agent_type;
-    }
-    sub.usage = mergeUsage(sub.usage, ev.subagent.usage);
   }
 
   // 스킬·BOT 호출 기록(PreToolUse만. PostToolUse에도 같은 필드가 와서 두 번 세지 않게)

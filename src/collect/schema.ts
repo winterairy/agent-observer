@@ -1,6 +1,7 @@
 /**
  * payload v1 검증(설계 5절 POST /api/events). zod 기본 strip 모드라 정의하지 않은 키
  * (prompt, tool_input, tool_response, message 등)는 결과에 남지 않는다.
+ * `usage`·`subagent`(토큰)도 스키마에 없어 어떤 형식으로 와도 검사 없이 버려진다(D-21).
  */
 import { z } from 'zod';
 import { config } from '@/config';
@@ -8,24 +9,6 @@ import { EVENT_NAMES, type IncomingEvent } from '@/domain/types';
 
 const str = z.string().max(config.maxStringLength);
 const optStr = str.nullish();
-const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-
-const usageSchema = z.object({
-  input: count,
-  output: count,
-  cache_creation: count,
-  cache_read: count,
-  model: optStr,
-  messages: count,
-});
-
-const subagentSchema = z.object({
-  agent_id: str.min(1),
-  agent_type: optStr,
-  status: optStr,
-  usage: usageSchema,
-});
-
 const ISO_PREFIX = /^\d{4}-\d{2}-\d{2}T/;
 
 export const payloadSchema = z.object({
@@ -47,8 +30,6 @@ export const payloadSchema = z.object({
   source: optStr,
   model: optStr,
   reason: optStr,
-  usage: usageSchema.nullish(),
-  subagent: subagentSchema.nullish(),
 });
 
 export type Payload = z.infer<typeof payloadSchema>;
@@ -100,15 +81,6 @@ export function parsePayload(raw: unknown, now: number): ParseResult {
   };
   for (const k of OPTIONAL_STRING_KEYS) {
     if (p[k] !== undefined) ev[k] = p[k] ?? null;
-  }
-  if (p.usage) ev.usage = { ...p.usage, model: p.usage.model ?? null };
-  if (p.subagent) {
-    ev.subagent = {
-      agent_id: p.subagent.agent_id,
-      agent_type: p.subagent.agent_type ?? null,
-      status: p.subagent.status ?? null,
-      usage: { ...p.subagent.usage, model: p.subagent.usage.model ?? null },
-    };
   }
   return { ok: true, event: ev };
 }

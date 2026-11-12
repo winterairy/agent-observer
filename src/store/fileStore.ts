@@ -2,12 +2,14 @@
  * 로컬 JSON 파일 저장소(1단계 기본, 설계 3절·ADR A4).
  * - `<dataDir>/state.json` 하나. 메모리에 전체 상태를 들고 쓰기는 250ms 디바운스로 모은다.
  * - `state.json.tmp`에 쓰고 rename(같은 폴더라 원자적). 파일 권한 0600.
- * - 읽을 때 schemaVersion이 다르거나 JSON이 깨졌으면 `state.json.bak-<시각>`으로 옮기고 빈 상태로 시작한다.
+ * - 읽을 때 schemaVersion이 다르거나(1 포함) JSON이 깨졌으면 변환하지 않고 `state.json.bak-<시각>`으로 옮긴 뒤
+ *   빈 상태로 시작한다(T1-1, 사용자 결정 2026-11-12).
  * - 프로세스 하나가 쓴다고 가정한다. `<dataDir>/lock`에 pid를 적고 다른 살아 있는 프로세스가 있으면 경고 로그.
  */
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { config } from '@/config';
+import { emptyPlanUsage } from '@/domain/types';
 import { CoreStore, SCHEMA_VERSION, emptyData, type CoreStoreOptions, type StoreData } from '@/store/core';
 
 export interface FileStoreOptions extends CoreStoreOptions {
@@ -72,11 +74,18 @@ export class FileStore extends CoreStore {
         parsed = null;
       }
       if (parsed && parsed.schemaVersion === SCHEMA_VERSION && parsed.sessions && parsed.events) {
-        this.data = { schemaVersion: SCHEMA_VERSION, seq: parsed.seq ?? 0, sessions: parsed.sessions, events: parsed.events };
+        this.data = {
+          schemaVersion: SCHEMA_VERSION,
+          seq: parsed.seq ?? 0,
+          sessions: parsed.sessions,
+          events: parsed.events,
+          planUsage: { ...emptyPlanUsage(), ...parsed.planUsage },
+        };
       } else {
         const bak = `${this.file}.bak-${Date.now()}`;
+        const ver = parsed && typeof parsed === 'object' ? String(parsed.schemaVersion) : '(깨진 JSON)';
         this.log.warn(
-          `[fileStore] ${STATE_FILE}의 형식이나 schemaVersion이 맞지 않아 ${path.basename(bak)}로 옮기고 빈 상태로 시작합니다`,
+          `[fileStore] schemaVersion ${ver} 파일을 백업하고 새로 시작: ${path.basename(bak)}로 옮겼습니다`,
         );
         await fsp.rename(this.file, bak);
         this.data = emptyData();

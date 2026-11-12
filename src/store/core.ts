@@ -3,20 +3,30 @@
  * 모든 연산은 Promise 체인 뮤텍스로 직렬화한다(설계 3절).
  */
 import { config } from '@/config';
-import { sessionKey, type IncomingEvent, type NormalizedEvent, type SessionState } from '@/domain/types';
-import type { Reducer, SessionFilter, Store } from '@/store/Store';
+import {
+  emptyPlanUsage,
+  sessionKey,
+  type IncomingEvent,
+  type NormalizedEvent,
+  type PlanReport,
+  type PlanUsageState,
+  type SessionState,
+} from '@/domain/types';
+import type { PlanMerger, Reducer, SessionFilter, Store } from '@/store/Store';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export interface StoreData {
   schemaVersion: number;
   seq: number;
   sessions: Record<string, SessionState>;
   events: Record<string, NormalizedEvent[]>;
+  /** T1-8 플랜 사용량(계정 단위 하나) */
+  planUsage: PlanUsageState;
 }
 
 export function emptyData(): StoreData {
-  return { schemaVersion: SCHEMA_VERSION, seq: 0, sessions: {}, events: {} };
+  return { schemaVersion: SCHEMA_VERSION, seq: 0, sessions: {}, events: {}, planUsage: emptyPlanUsage() };
 }
 
 export interface RetentionLimits {
@@ -137,6 +147,19 @@ export abstract class CoreStore implements Store {
       if (!s) return;
       s.dismissedAtTs = null;
       s.restoredAtTs = now;
+    });
+  }
+
+  getPlanUsage(): Promise<PlanUsageState> {
+    return this.read(() => structuredClone(this.data.planUsage));
+  }
+
+  applyPlanUsage(report: PlanReport, now: number, fn: PlanMerger): Promise<PlanUsageState> {
+    return this.write(() => {
+      // fn이 실패하면 저장값을 바꾸지 않는다
+      const next = fn(structuredClone(this.data.planUsage), report, now);
+      this.data.planUsage = next;
+      return structuredClone(next);
     });
   }
 

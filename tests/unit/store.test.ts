@@ -108,11 +108,11 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
     expect(await store.listSessions()).toEqual([]);
   });
 
-  it('보관 한도: 세션당 최근 N개만 남기고 스냅숏(토큰·스킬)은 유지한다', async () => {
+  it('보관 한도: 세션당 최근 N개만 남기고 스냅숏(스킬)은 유지한다', async () => {
     const store = await make({ limits: { maxEventsPerSession: 5 }, clock: () => T0 });
     for (let i = 0; i < 12; i++) {
       await store.applyEvent(
-        inc('PreToolUse', { tool: 'Skill', skill: 'qa-check', at: T0 + i, usage: { input: i, output: 0, cache_creation: 0, cache_read: 0, model: null, messages: i } }),
+        inc('PreToolUse', { tool: 'Skill', skill: 'qa-check', at: T0 + i }),
         applyEvent,
       );
     }
@@ -121,7 +121,6 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
     expect(events.map((e) => e.seq)).toEqual([8, 9, 10, 11, 12]);
     const s = await store.getSession(key);
     expect(s?.skills.__lead__['qa-check'].count).toBe(12);
-    expect(s?.agents.__lead__.usage.input).toBe(11);
   });
 
   it('prune: 7일 지난 이벤트를 지우고 스냅숏은 남긴다', async () => {
@@ -163,7 +162,7 @@ describe('fileStore 파일 동작', () => {
     const st = await stat(path.join(dataDir, 'state.json'));
     expect(st.mode & 0o777).toBe(0o600);
     const disk = JSON.parse(await readFile(path.join(dataDir, 'state.json'), 'utf8'));
-    expect(disk.schemaVersion).toBe(1);
+    expect(disk.schemaVersion).toBe(2);
     expect(disk.seq).toBe(5);
     await store.close();
   });
