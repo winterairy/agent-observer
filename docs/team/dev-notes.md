@@ -160,3 +160,74 @@ R-16: 1차 '단가 확인 결과'·'설계와 달라진 점 1, 2, 6'과 Haiku �
 - 화면: 3초 폴링에 `GET /api/plan-usage`를 더하고 응답 `now` 기준으로 남은 시간·"마지막 측정 N분 전" 계산(6.5). 상단 영역과 임시 사무실 계기판이 같은 응답을 쓴다.
 - README: "`.data/state.json.bak-*`는 지워도 된다" 안내, 현재 구현 범위에 플랜 사용량 API 추가.
 - `tests/script/statusline.test.ts`(설치 사본이 들어온 뒤), Playwright `e2e/plan-usage-screen.spec.ts`(실제 서버에 report를 보내 만든다).
+
+## 개발 3차-나 (2026-11-12): 화면, Pretendard, T1-6 캐릭터, 테스트·E2E, README
+
+범위: `/login`·`/` 화면(T1-4 화면, T1-5, T1-8 (다)), Pretendard, T1-6 캐릭터, `tests/script/statusline.test.ts`, Playwright(T1-7·T1-8 화면), README 실행 방법.
+
+### 구현 내용
+
+| 파일 | 내용 |
+|---|---|
+| `app/fonts/PretendardVariable.woff2`, `app/fonts/OFL.txt` | 공식 릴리스 v1.3.9 `Pretendard-1.3.9.zip`의 `web/variable/woff2/PretendardVariable.woff2`(수정 없음, SHA-256 `9599f12f…00b4`)와 같은 압축의 `LICENSE.txt` 원문. `THIRD_PARTY_NOTICES.md`에 Pretendard 절 |
+| `app/layout.tsx`, `app/tokens.css`, `app/globals.css` | `next/font/local`(weight 45 920, swap, preload, 시스템 fallback). 토큰은 `:root, [data-office-scope]` 라이트 + 다크 블록(office-* 없음), `color-scheme`. 리셋·포커스 링·reduced-motion |
+| `app/login/*` | fetch 로그인 → 204면 `safeNextPath(next)`로 `location.replace`. 401(입력 지움·포커스), 429(Retry-After 초 카운트다운, 버튼 비활성), 403·500·네트워크(ErrorBar). 각주 항상, `aria-describedby="password-error login-note"` |
+| `app/page.tsx`, `src/ui/Dashboard.tsx` | 헤더(SyncIndicator, 로그아웃) → 승인 대기 띠 → 플랜 사용량 → 필터 → 목록·상세·사무실. 3초 폴링(`/api/sessions`, `/api/plan-usage`, `/api/projects`, 선택 시 상세, 숨긴 세션 펼침 시 `hidden=only`), 숨긴 탭 정지·복귀 즉시 1회, 401 → `/login?next=`. 연속 3회 실패 ErrorBar. 필터는 URL → localStorage → 전체. 1280만 첫 세션 자동 선택. 정리·다시 표시·포커스 규칙(명세 3.6·3.6.1·6절) |
+| `src/ui/PlanUsage.tsx` | PlanUsagePanel/Meter(ok·near·reached·expired·none, 두 창 none이면 안내 블록, 스켈레톤), `role="meter"`·`aria-valuetext`, 시간 문구는 응답 `now` 기준. PlanUsageMini(aria-hidden) |
+| `src/ui/SessionList.tsx`, `SessionDetail.tsx`, `Office.tsx`, `StatusBadge.tsx`, `statusStyle.ts`, `icons.tsx`, `format.ts`, `api.ts`, `*.module.css` | SessionRow(`<li>` 안 링크·버튼 형제, variant hidden), 종료·숨긴 세션 접기, 빈 상태, 상세(모델 줄 `<dl>`, BOT 표 + AgentRow, `@container (max-width:560px)`), 임시 사무실(세 구역, 40px 사각형, 책상 막대, 캐릭터 프레임), 인라인 SVG 아이콘 |
+| `src/auth/nextPath.ts`, `proxy.ts` | `safeNextPath`를 옮겨 proxy와 로그인 화면이 같이 쓴다(proxy는 다시 export, 동작 같음) |
+| `src/characters/roles.ts` | `roleKeyFor`(null → lead, 원문 → 원문, `plugin:x` → x, 없으면 원문. vendor roleConfig.js에서 옮겨 고침, NOTICES), `makeRoleResolver`, roles.json(없으면 `config/roles.example.json`)·character.json mtime 캐시(D-20), `loadCharacter`(경로 이탈·그림 존재 확인), `charactersView` |
+| `src/characters/spriteConfig.ts` | zod 설정 검증(그림 이름은 폴더 구분자 없는 png/webp), `resolveAction`(D-19) |
+| `app/api/characters/route.ts`, `app/api/characters/[id]/image/route.ts` | 쿠키 필요. 그림은 id 정규식 + resolve 접두사, png/webp, `Cache-Control: private, max-age=60`, 그 외 404 |
+| `app/api/sessions/[key]/route.ts`, `app/api/skills/route.ts` | `roles: getRoleResolver()` 연결 |
+| `config/roles.example.json`, `config/characters.example/` | 예시 roles(캐릭터 모두 null), `sample/character.json` + `sheet.png`(코드로 만든 32×32 단색 사각형 테스트 그림, 16×16 칸 2줄×2프레임: idle, alert) |
+| `tests/unit/characters.test.ts`, `tests/api/characters.test.ts`, `tests/unit/format.test.ts` | 매핑·대체·설정 검증, 캐릭터 API(경로 이탈, 깨진 설정, 그림 없음), 화면 문구 |
+| `tests/api/query.test.ts` | todo 2개 → 캐릭터 두 route의 401 테스트. lead 외 표시 이름이 예시 roles로 매핑되어 qa → "QA"로 기대값 변경 |
+| `tests/script/statusline.test.ts` | 설치 사본 실행(아래). `vitest.config.ts` include에 `tests/script`, `testTimeout` 20초 |
+| `playwright.config.ts`, `e2e/*` | 포트 3100(빌드 후 start, 임시 데이터·캐릭터 폴더), 3101(시드 state.json). project `plan-screen` → `main`(의존). trace off |
+| `.gitignore` | `characters/` → `/characters/`(아래 "바로잡은 것"), `test-results/`, `playwright-report/` |
+| `README.md` | 실행 방법, 환경 변수, 테스트, observe·statusLine 연결, NO_PROXY, 캐릭터, `.data` 백업 파일 안내 |
+
+### 검증
+- `pnpm typecheck` 통과.
+- `pnpm test` 417개 통과(14개 파일). 이번 추가·변경: unit characters 25, unit format 6, api characters 13, api query 37(+2, todo 없음), script statusline 24.
+- `pnpm build` 통과(경고 0. 캐릭터 경로의 동적 fs 접근에 `turbopackIgnore` 주석).
+- `pnpm test:e2e --trace off` 16개 통과(plan-screen 7, flow 6, observe 1, plan-usage 2). Chromium은 `/opt/pw-browsers/chromium`(설치된 @playwright/test 1.65가 기대하는 headless shell 1254가 없어 executablePath 사용). `playwright install`은 하지 않았다.
+- 스크린샷: `docs/team/reports/screens/qa/dashboard-1280.png`, `dashboard-390.png`(상세 열림), `dashboard-390-list.png`(목록). 테스트 데이터만 보인다.
+- 다크 모드는 수동으로 390·1280 스크린샷을 찍어 사무실이 라이트 값으로 보이고 2px office-edge 테두리가 생기는 것을 눈으로 확인했다(자동 테스트 아님, 저장 안 함).
+
+### statusline 멈춤 확인(설계 6.1 [구현 시 확인 필요], 이 환경 범위)
+- 설치 사본(0.1.3)을 임시 폴더에 복사하고, 감싼 명령을 "실행 흔적을 파일에 남기고 stdin의 `model.display_name`을 출력"하는 명령으로 두어, 실제 Claude Code statusLine 입력과 같은 모양의 stdin(`session_id`, `transcript_path`, `cwd`, `model`, `workspace`, `version`, `output_style`, `cost`, `exceeds_200k_tokens`, `rate_limits`)을 넣었다.
+  - 같은 stdin 두 번: 두 번째는 감싼 명령이 실행되지 않고(흔적 1줄 그대로) 같은 출력 `[Opus 5.5]`, exit 0 → **멈춤 확인**.
+  - `cost.total_duration_ms`만 바뀐 stdin: 역시 멈춤(설치 사본의 `FINGERPRINT_IGNORE`).
+  - `cost.total_api_duration_ms`가 바뀐 stdin: 감싼 명령이 다시 실행됨(재개).
+- 같은 내용을 `tests/script/statusline.test.ts`가 자동으로 확인한다.
+- 이 환경에 Claude Code 2.1.322 CLI가 있지만 지시대로 실제 세션을 띄워 `CLAUDE_PROJECT_DIR`·한가할 때 stdin 변화를 기록하지는 않았다. 설치 사본 주석에 "2.1.322에서 확인: 한가할 때 바뀌는 것은 세션 경과 시간뿐"이라고 되어 있다(kit 쪽 확인 결과).
+
+### 설계·디자인과 달라진 점과 이유
+1. **statusline 스크립트 테스트에서 재개를 만들 때 `cost.total_api_duration_ms`를 바꾼다.** 설계 6.6은 `cost.total_duration_ms`를 바꾸라고 했지만, 설치 사본(0.1.3)은 그 필드를 지문에서 빼므로(설계 6.1 확인 결과 반영) 그대로 하면 멈춤으로 들어간다. 그 필드만 바뀌면 멈추는 것도 따로 테스트했다. 설계 6.6 문구 갱신이 필요하다.
+2. **`GET /api/characters`의 `actions`는 D-19 대체까지 적용한 결과를 `<동작>_down` 키로 준다**(설계 예시의 키 형식은 같고, 원래 줄 목록 대신 대체 결과). 화면이 zod·대체 로직을 번들에 넣지 않고 키 조회만 하면 된다. 1단계는 방향이 down뿐이다.
+3. **캐릭터 프레임은 `background-image` 대신 숨김 영역 안 `<img>`를 `transform: scale() translate()`로 잘라 보인다.** 그림 전체 크기를 모르고도 정수 배율로 키울 수 있고, 그림 로딩 실패를 `onError`로 받아 사각형으로 돌아가기 위해서다(명세 3.8 "onerror도 사각형"). `image-rendering: pixelated`, 프레임은 CSS `steps()` 애니메이션(reduced-motion이면 정지).
+4. **`config/roles.example.json`은 모든 역할의 캐릭터를 null로 둔다.** roles.json이 없으면 예시를 읽는데(설계 7절), 예시에서 lead를 `sample`로 지정하면 그림 폴더가 없어 요청마다 경고 로그가 남는다. 지정 방법은 `config/characters.example/README.md`와 README에 적었다. E2E는 임시 폴더에 lead → sample을 지정해 프레임 표시를 확인한다.
+5. **예시 테스트 그림 `config/characters.example/sample/sheet.png`를 커밋했다.** 설계 1절·책임자 지시("직접 만든 테스트 그림")를 따랐다. DESIGN.md 8절 Don't "폰트·이미지·아이콘 파일을 저장소에 추가하지 않는다(예외 Pretendard)"와 문구가 부딪힌다. 화면 자산이 아닌 테스트용 144바이트 단색 사각형이지만, DESIGN.md 예외 목록에 넣을지 designer 확인이 필요하다.
+6. **상세의 "정리/다시 표시" 판단은 상세 응답의 `session.dismissedAt`으로 한다.** 명세 3.6.1은 "세션 키가 숨긴 목록에 있는지"인데, 설계 8절대로 숨긴 목록은 펼쳤을 때만 부르므로 접힌 상태에서도 맞게 보이도록 바꿨다. 숨긴 세션 수는 명세 9절 간극대로 `hiddenCount`를 쓴다.
+7. **`/api/projects`도 3초 폴링에 넣었다.** 설계 8절 폴링 목록에는 없지만 필터 옵션의 "활성 a/b"와 새 프로젝트가 화면을 새로 고치지 않아도 반영되게 하려는 것이다(작은 응답).
+8. **BOT 배지의 기다린 시간·응답 없음**: 에이전트 DTO에 이미 `waitingSince`·`stale`이 있어(2차) 명세 9절 간극 없이 그대로 쓴다.
+9. **승인 대기 띠**는 `role="status" aria-live="polite"` 요소를 항상 두고 그 안에 버튼을 넣는다. 띠가 처음 나타날 때도 읽히게 하려는 것이다(라이브 영역이 나중에 생기면 읽히지 않는다).
+10. **남은 시간 24시간 이상에서 M=0이면 "N일 0시간 후"**로 쓴다(DESIGN.md는 시간 단위에만 M=0 예외가 있어 문구 그대로 따랐다). 5시간 창 초기화가 모레 이후면(실제로는 없음) 주간과 같은 날짜 형식을 쓴다.
+11. **다크 모드 `--shadow-sm`·`--shadow-md`는 `none`**(DESIGN.md 5절 "다크는 그림자 없이").
+12. **OFL.txt**: DESIGN.md 3.1은 "저작권 줄 4개"라고 했지만 v1.3.9 공식 `LICENSE.txt`의 저작권 줄은 1개다. 받은 원문을 그대로 두었다.
+13. **E2E 서버 두 개**: 3101은 3100의 빌드가 끝날 때까지 `e2e/wait-for.mjs`로 기다린 뒤 같은 `.next`로 start한다(동시 빌드 방지). 플랜 사용량 화면 상태 파일은 project 의존으로 다른 테스트보다 먼저 빈 서버에서 돈다(설계 6.6 "먼저 돌리거나").
+14. **로그인 429에 `Retry-After`가 없으면 60초**로 센다(서버는 항상 붙이므로 대비용).
+
+### 바로잡은 것
+- `.gitignore`의 `characters/` 규칙이 `src/characters/`·`app/api/characters/`까지 무시해, 커밋 `9594a9c`(T1-6)에 `roles.ts`·`spriteConfig.ts`·두 route가 빠졌다. 바로 다음 커밋 `310a11d`에서 규칙을 `/characters/`로 좁히고 파일을 넣었다. 따라서 `9594a9c` 하나만 체크아웃하면 타입 검사가 깨진다(이력은 다시 쓰지 않음). 루트 `characters/`는 여전히 무시된다(`git check-ignore`로 확인).
+
+### 알려진 제한·남은 문제
+- **1280에서 세션 상세 BOT 목록이 표가 아니라 AgentRow로 보인다.** 명세 3.2 격자 `360 | 1fr | 360`, 좌우 24px, 열 간격 16px이면 1280에서 가운데 열이 약 480px(패널 안쪽은 더 좁음)라 명세의 `@container (max-width: 560px)` 규칙에 걸린다. 명세 5절 표("1280: DataTable")와 3.2 규칙이 서로 맞지 않는다. 지금은 규칙(560px)을 따랐다. 1280에서 표를 보이려면 기준 폭 또는 열 폭을 designer가 정해야 한다.
+- E2E "폴링 3초 + 1초" 테스트는 이 환경에서 3.8~3.9초가 걸려 느린 PC에서는 가끔 실패할 수 있다.
+- QA 스크린샷의 플랜 사용량은 앞선 화면 상태 테스트가 남긴 값(5시간 100% 한도 도달)이다. 테스트 데이터라 그대로 두었다.
+- 응답 없음(24시간) 화면은 서버 시계를 바꿀 수 없어 E2E로 보지 않았다(배지 문구·아이콘은 단위 테스트, 판정은 2차 API 테스트).
+- 캐릭터 설정 캐시(Map)는 지우지 않는다(파일 수만큼, 작음).
+- `profile.md` "명령" 절의 E2E 항목("1단계 3차에서 설정 예정")과 `tests/script` 문구 갱신은 `.claude/` 수정 금지라 하지 않았다. 책임자가 갱신해 주세요.
+- 실제 Claude Code 세션의 `CLAUDE_PROJECT_DIR`·한가할 때 stdin, 휴대폰 확인은 `[사용자 확인]`으로 남는다.
