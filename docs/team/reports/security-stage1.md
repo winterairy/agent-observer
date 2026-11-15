@@ -98,3 +98,25 @@
 ### 재점검 판정
 - SEC-01 해결, SEC-03 해결. 새 Critical/High 없음. 남은 미해결 항목은 기존 Low(SEC-04·SEC-05 등)뿐이다.
 - 실행: 코드 diff 검토, grep, 검증 서버 curl 프로브(서버는 계속 정상). 테스트는 실행하지 않았다(빌드 산출물을 만들지 않기 위해서).
+
+## 운영 단계 재검토(2026-11-15)
+
+범위: 커밋 4bb3bfb의 `.github/workflows/ci.yml`, `docs/operations.md`, `docs/deploy-vercel.md`, `README.md` 변경만 봤다. 실행한 것은 diff 검토와 grep(토큰 패턴 `ghp_`·`sk-`·`github_pat`, 개인 경로 `/home/`·`/Users/`, 이메일)이다. 결과는 0건이었다. 외부 호출과 감사 명령은 실행하지 않았다(의존성 변경이 없어서).
+
+### 확인 결과(문제없음)
+- 권한: 최상위에 `permissions: contents: read`가 있고 job별로 권한을 넓히지 않는다. 최소 권한이다.
+- 트리거: `push`와 `pull_request`만 있다. `pull_request_target`·`workflow_run`은 없다. 포크 PR에는 읽기 전용 토큰만 가고 secrets가 넘어가지 않는다. 워크플로에 `secrets.*` 참조가 없다. `${{ github.event.* }}`처럼 신뢰할 수 없는 입력을 `run:`에 넣는 곳도 없다(셸 주입 없음). `concurrency`의 `github.ref`는 group 이름으로만 쓴다.
+- 캐시: `setup-node`의 pnpm 캐시만 쓰고 `--frozen-lockfile`로 설치한다. GitHub 캐시는 ref 범위로 나뉘어 PR 실행이 기본 브랜치 캐시를 덮어쓸 수 없다. 1단계 기준으로 오염 위험은 낮다.
+- CI env의 임시 값: 이름(`ci-placeholder-…-not-a-secret`)과 주석이 실제 값이 아님을 밝힌다. 메모리 저장소이고 CI 러너 안에서만 쓴다. E2E는 실행할 때 무작위 값을 만든다.
+- 문서: 비밀값·실제 토큰·개인 경로가 없다(`/opt/pw-browsers/chromium`은 공용 설치 경로). 비밀값은 `.env.local`과 `settings.local.json`에만 두라고 안내하고, 교체 절차는 `openssl rand`를 쓴다. 토큰 확인 curl은 값을 직접 쓰지 않고 `$AGENT_OBSERVER_TOKEN` 변수를 쓰며, 응답 본문도 출력하지 않는다. Vercel 문서는 환경 변수 값을 문서에 쓰지 말고 Sensitive로 저장하라고 하며, 배포는 사람이 승인한 뒤에만 한다고 적었다.
+
+### 발견 사항
+| ID | 심각도 | 위치 | 내용 | 권고 |
+|---|---|---|---|---|
+| SEC-06 | Low | `.github/workflows/ci.yml:28-30,43-45` | 서드파티 액션 `pnpm/action-setup@v4`와 공식 액션 `actions/*@v4`를 SHA가 아닌 태그로 고정했다. 태그가 바뀌거나 액션이 탈취되면 CI에서 임의 코드가 실행될 수 있다. 다만 토큰이 `contents: read`뿐이고 secrets와 배포가 없어 영향은 CI 결과 위조와 캐시 오염 정도다. 1단계 공개 저장소이므로 Low로 본다. | 2단계(배포·secrets 도입) 전에 커밋 SHA로 고정하고(주석에 버전 표시), Dependabot `github-actions` 업데이트를 켠다. 최소한 서드파티 `pnpm/action-setup`은 먼저 고정한다. |
+| SEC-07 | Low | `.github/workflows/ci.yml:28,43` | `actions/checkout`에 `persist-credentials: false`가 없어 읽기 전용 GITHUB_TOKEN이 `.git/config`에 남는다. 그래서 install·test 단계의 의존성 코드가 이 토큰을 읽을 수 있다. 권한이 read라 영향은 작다. | `with: persist-credentials: false`를 추가한다. |
+| SEC-08 | Info | `docs/operations.md` 6절 3항, 4절 | `AGENT_OBSERVER_DEBUG=1`이면 보낼 본문이 stderr에 찍히고, `tee observer.log`로 남기라고 안내한다. 본문에 프로젝트 경로나 세션 정보가 들어갈 수 있다. | 디버그 출력과 로그 파일을 공유하지 말고 확인이 끝나면 지우라는 한 줄을 덧붙인다. |
+| SEC-09 | Info | `docs/operations.md` 10절 | `-H 0.0.0.0`으로 열면 같은 네트워크의 누구나 접근할 수 있다는 점은 이미 적혀 있다. 그 상태에서는 HTTP 평문이라 쿠키와 토큰이 노출된다. | 공용 Wi-Fi에서는 쓰지 말라는 경고와, 강한 비밀번호·토큰을 쓰라는 안내를 추가한다. |
+
+### 판정
+**PASS** — Critical 0, High 0, Medium 0, Low 2(SEC-06, SEC-07), Info 2. 2단계로 넘어가기 전에 SEC-06과 SEC-07을 처리하기를 권한다.
