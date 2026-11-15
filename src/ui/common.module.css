@@ -1,0 +1,264 @@
+/* 공통 컴포넌트: Panel, Button, Note, Skeleton, ErrorBar, 배지(DESIGN.md 5·6절) */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3);
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .panel {
+    padding: var(--space-4);
+  }
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  min-height: 32px;
+}
+
+.panelTitle {
+  font-size: var(--text-h2-size);
+  line-height: var(--text-h2-line);
+  font-weight: var(--text-h2-weight);
+  letter-spacing: var(--text-h2-tracking);
+}
+
+.panelTitle:focus {
+  outline: none;
+}
+
+.panelTitle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.caption {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-caption-weight);
+  letter-spacing: var(--text-caption-tracking);
+  color: var(--color-ink-muted);
+}
+
+.small {
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.muted {
+  color: var(--color-ink-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.h3 {
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+
+/* Button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  min-height: 40px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--duration) ease-out;
+  font-size: var(--text-small-size);
+  font-weight: 500;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary {
+  background: var(--color-primary);
+  color: var(--color-primary-on);
+  border: none;
+  font-size: var(--text-body-size);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.secondary {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border-strong);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-ink-muted);
+  border: none;
+}
+
+.secondary:hover:not(:disabled),
+.ghost:hover:not(:disabled) {
+  background: var(--color-surface-sunken);
+}
+
+@media (max-width: 767px) {
+  .secondary,
+  .ghost {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 768px) {
+  .secondary,
+  .ghost {
+    min-height: 32px;
+  }
+}
+
+/* Note */
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  color: var(--color-ink-muted);
+}
+
+.note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* 오류 문구 */
+.danger {
+  color: var(--color-danger);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+/* ErrorBar */
+.errorBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  background: var(--color-status-stale-bg);
+  color: var(--color-danger);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+}
+
+.errorBar > span {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  flex: 1 1 240px;
+}
+
+.errorBar svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* Skeleton */
+.skeleton {
+  display: block;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+  height: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: pulse 1.5s ease-out infinite alternate;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
+/* 상태 배지와 같은 형태(StatusBadge, 플랜 수준 배지) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-caption-weight);
+  letter-spacing: var(--text-caption-tracking);
+  max-width: 100%;
+  flex: none;
+}
+
+.badge svg {
+  flex: none;
+}
+
+.badgeText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.cloud {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-ink-muted);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  font-size: var(--text-caption-size);
+  line-height: 18px;
+  font-weight: var(--text-caption-weight);
+  flex: none;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-caption-weight);
+  color: var(--color-ink);
+}
