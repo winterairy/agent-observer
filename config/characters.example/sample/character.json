@@ -1,0 +1,10 @@
+{
+  "image": "sheet.png",
+  "frameWidth": 16,
+  "frameHeight": 16,
+  "fps": 4,
+  "rows": [
+    { "action": "idle", "direction": "down", "frames": 2 },
+    { "action": "alert", "direction": "down", "frames": 2, "fps": 6 }
+  ]
+}

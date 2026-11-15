@@ -1,0 +1,10 @@
+{
+  "lead": { "name": "책임자", "character": null },
+  "planner": { "name": "기획", "character": null },
+  "architect": { "name": "설계", "character": null },
+  "designer": { "name": "디자인", "character": null },
+  "developer": { "name": "개발", "character": null },
+  "qa": { "name": "QA", "character": null },
+  "security": { "name": "보안", "character": null },
+  "devops": { "name": "배포", "character": null }
+}

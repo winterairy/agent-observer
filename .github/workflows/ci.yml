@@ -1,0 +1,60 @@
+# agent-observer CI (1단계). 배포는 하지 않는다(profile: 1단계에서는 배포하지 않음).
+# 비밀값을 쓰지 않는다. 아래 env 값은 CI 전용 임시 값이며 실제 토큰·비밀번호가 아니다.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  OBSERVER_TOKEN: ci-placeholder-token-not-a-secret
+  OBSERVER_PASSWORD: ci-placeholder-password
+  OBSERVER_STORE: memory
+
+jobs:
+  check:
+    name: typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4   # 버전은 package.json packageManager(pnpm@10.28.0)에서 읽는다
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  e2e:
+    name: e2e (Playwright Chromium)
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 30
+    # 필수(실패하면 CI 실패). 화면·observe.mjs·statusline.mjs 통합이 1단계 수용 기준이라 막는 검사로 둔다.
+    # 토큰·비밀번호·데이터 폴더는 playwright.config.ts가 실행할 때 임시로 만든다.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Chromium 설치(CI 러너에서만)
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e -- --trace off
