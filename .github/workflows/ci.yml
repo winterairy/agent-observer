@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4   # 버전은 package.json packageManager(pnpm@10.28.0)에서 읽는다
       - uses: actions/setup-node@v4
         with:
@@ -45,6 +47,8 @@ jobs:
     # 토큰·비밀번호·데이터 폴더는 playwright.config.ts가 실행할 때 임시로 만든다.
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

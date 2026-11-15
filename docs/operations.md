@@ -53,7 +53,7 @@
 | `[store] 알 수 없는 OBSERVER_STORE 값` | 오타. file 저장소로 동작 중 |
 | `[characters] …` | 캐릭터 설정 오류(화면에서는 사각형으로 보임) |
 
-오류 로그에는 예외 이름만 남고 payload 내용은 남지 않는다. 남기려면 `pnpm dev 2>&1 | tee observer.log`(`*.log`는 gitignore됨).
+오류 로그에는 예외 이름만 남고 payload 내용은 남지 않는다. 남기려면 `pnpm dev 2>&1 | tee observer.log`(`*.log`는 gitignore됨). 프로젝트 경로·세션 정보가 남을 수 있으니 공유하지 말고 확인 후 지운다.
 
 ## 5. 토큰·비밀번호 교체
 
@@ -71,7 +71,7 @@
      -H "Authorization: Bearer $AGENT_OBSERVER_TOKEN" -H 'Content-Type: application/json' -d '{}'
    ```
    `401`이면 토큰 불일치, `400`이면 토큰은 맞고 본문만 틀린 것(정상), `000`이면 연결 실패(프록시·주소 확인).
-3. hook: `AGENT_OBSERVER_DEBUG=1`로 Claude Code를 띄우면 observe.mjs가 보낼 본문을 stderr에 쓴다. 화면에 세션이 3초 안에 나타나는지 본다. `.claude/settings.json`의 `hooks`에 observe.mjs가 있는지 확인한다.
+3. hook: `AGENT_OBSERVER_DEBUG=1`로 Claude Code를 띄우면 observe.mjs가 보낼 본문을 stderr에 쓴다(프로젝트 경로·세션 정보가 남을 수 있으니 공유하지 말고 확인 후 지운다). 화면에 세션이 3초 안에 나타나는지 본다. `.claude/settings.json`의 `hooks`에 observe.mjs가 있는지 확인한다.
 4. statusLine: `.claude/settings.json`의 `statusLine.command`가 `statusline.mjs`를 가리키는지 확인한다. 값은 Claude 구독 로그인 세션의 첫 응답 이후에만 생기고, 바뀔 때만 최대 1분에 1회 보낸다. "마지막 측정 N분 전"이 오래돼도 한가하면 정상이다.
 5. `AGENT_OBSERVER_DISABLE=1`이 남아 있지 않은지, `AGENT_OBSERVER_URL`이 설정돼 있는지 확인한다.
 
@@ -105,4 +105,4 @@ CI는 비밀값을 쓰지 않는다. job env의 `OBSERVER_TOKEN`·`OBSERVER_PASS
 
 - GitHub Actions에서 첫 CI 실행 결과(이 환경에서는 로컬에서 같은 명령만 확인).
 - E2E job이 GitHub 러너에서 시간 안에 끝나는지(build 2회 포함). 불안정하면 `continue-on-error: true`로 낮출지 결정.
-- 휴대폰에서 볼 때 `-H 0.0.0.0`으로 직접 여는 것(같은 네트워크 누구나 로그인 화면에 접근 가능).
+- 휴대폰에서 볼 때 `-H 0.0.0.0`으로 직접 여는 것(같은 네트워크 누구나 로그인 화면에 접근 가능). HTTP 평문이라 같은 네트워크에서 쿠키·토큰이 보인다. 공용 Wi-Fi에서는 쓰지 않는다.

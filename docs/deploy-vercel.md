@@ -31,6 +31,7 @@
 - Origin 비교 기준을 `Host` 대신 설정된 공개 호스트로, `Sec-Fetch-Site` 함께 확인. `isHttps`의 x-forwarded-proto 신뢰 범위 확인, Secure 쿠키 강제.
 - SEC-01 수정 유지 확인(공개 수집 엔드포인트가 되므로 필수).
 - 배포 시점에 Next.js 16.x 보안 공지 재확인.
+- CI: 액션 SHA 고정과 Dependabot github-actions(SEC-06).
 
 ## 4. 저장소 비공개 전환
 
