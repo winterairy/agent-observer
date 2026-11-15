@@ -78,3 +78,23 @@
 - `OBSERVER_SESSION_SECRET` 필수화와 교체 절차, 쿠키 기간.
 - 파일 저장소 대신 쓸 저장소의 접근 권한과 비밀값 관리(Vercel env).
 - Next.js 16.x 보안 공지를 배포 시점에 다시 확인.
+
+## 재점검(2026-11-15) — SEC-01·SEC-03만
+
+범위: 수정 커밋 f3e6ad5(SEC-01), d09a9ac(SEC-03). 그 밖의 항목은 다시 보지 않았다.
+
+### SEC-01 — 해결
+- 근거(코드): `src/domain/dict.ts`의 `dict()`(null-prototype), `getOwn`(`Object.hasOwn`), `setOwn`(`defineProperty`라 `__proto__` setter를 거치지 않음), `toDict`가 다음 경로에 모두 적용됐다. reducer(agents·skills·agentCalls 생성·조회·쓰기), store core(append·getSession·recentEvents·dismiss·restore·pruneAll), fileStore 로드(`toDict(parsed.sessions/events)`), totals(byRole·agents·agentCalls), views(skills), roles(`charactersView`), Office.tsx(`Object.hasOwn`). `structuredClone`한 일반 객체도 `getOwn`/`setOwn`으로만 접근한다.
+- grep(`[..] =`, `??=`, `in`, `hasOwnProperty`, `Object.keys`, `structuredClone`, `JSON.parse`) 결과 남은 곳: plan(view·merge·schema)과 roles.ts:164는 고정 키 목록만 쓴다. `src/ui/Dashboard.tsx:308` `next[key] = msg`는 브라우저 지역 객체(`{...prev}`) 하나의 프로토타입만 바뀌고 전역 오염은 없으며, key는 서버가 만든 base64 세션 키다. 문제없음.
+- 근거(실측, 127.0.0.1:3000): `__proto__`·`constructor`·`prototype`을 session_id·project·agent_id·skill(Skill)·subagent_type(Agent)·tool에 넣은 이벤트 9건은 모두 202였다. 로그인한 상태에서 dismiss·restore를 원시 값(및 `%5F%5Fproto%5F%5F`)으로 보내면 404(세션 키가 base64라 매칭되지 않음)였고, 실제 `__proto__` 세션 키(`X19wcm90b19fCl9fcHJvdG9fXw`)로는 204였다. 그 뒤 상세 조회 200(정상 값), `/login` 200, `/api/sessions` 200, `/api/projects` 200으로 서버는 오염되지 않았다.
+- 남은 위험(Low, 이슈 아님): 스키마가 이 값을 거부하지 않으므로(D-21) 안전성이 dict 접근 규칙 하나에 달려 있다. 새 맵 코드가 `obj[key] = …`를 쓰면 다시 생긴다. 회귀 테스트 `tests/api/protoKeys.test.ts`를 유지하고 리뷰 때 확인한다. 2단계 저장소를 바꿀 때도 같은 규칙을 지킨다.
+
+### SEC-03 — 해결
+- 근거: `/login` 응답에 `Content-Security-Policy`(`frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`이 있다(`next.config.ts`, 모든 경로 `/:path*`). 클릭재킹은 막혔다.
+- `script-src 'unsafe-inline'`: nonce 없는 Next App Router inline script 때문에 필요하다. 지금은 XSS 싱크가 없고 React가 escape하므로 1단계 로컬 기준으로 수용한다(Low).
+- 개발 모드 `'unsafe-eval'`·`ws: wss:`: `NODE_ENV !== 'production'`일 때만 들어간다. 검증 서버가 dev라 이 값이 보인다. 로컬 개발 한정이므로 수용한다.
+- 남은 위험: 2단계 배포 때 nonce 기반 CSP(proxy/middleware)로 `'unsafe-inline'`을 없애는 것을 검토하고, HSTS를 추가하고, 운영 빌드에 `'unsafe-eval'`이 없는지 확인한다.
+
+### 재점검 판정
+- SEC-01 해결, SEC-03 해결. 새 Critical/High 없음. 남은 미해결 항목은 기존 Low(SEC-04·SEC-05 등)뿐이다.
+- 실행: 코드 diff 검토, grep, 검증 서버 curl 프로브(서버는 계속 정상). 테스트는 실행하지 않았다(빌드 산출물을 만들지 않기 위해서).

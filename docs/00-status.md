@@ -16,9 +16,9 @@
 | 디자인 명세 | 완료 (승인됨) | designer | DESIGN.md, docs/team/design-spec-stage1.md | |
 | 개발 | 완료 | developer | | |
 | QA | 완료 (PASS, Low 2) | qa | | |
-| 보안 | 반려(1회) — SEC-01 High 수정 중 | security | | |
+| 보안 | 완료 (재점검 통과) | security | | |
 | 디자인 리뷰 | 완료 (PASS, Low 2) | designer | | |
-| 운영 | 대기 | devops | | |
+| 운영 | 진행 | devops | | |
 | 문서 반영 | 대기 | planner | | |
 | ★승인2 | 대기 | 사용자 | | |
 
