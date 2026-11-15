@@ -31,7 +31,7 @@ pnpm dev                     # http://127.0.0.1:3000
 | `OBSERVER_DATA_DIR` | 아니오 | `./.data` | 파일 저장소 폴더 |
 | `OBSERVER_CHARACTERS_DIR` | 아니오 | `./characters` | 역할·캐릭터 설정 폴더 |
 
-`pnpm dev`와 `pnpm start`를 같은 `.data` 폴더로 동시에 띄우지 마세요(서로 덮어씁니다).
+`pnpm dev`와 `pnpm start`를 같은 `.data` 폴더로 동시에 띄우지 마세요(서로 덮어씁니다). `pnpm dev`가 떠 있는 동안 `pnpm build`(또는 `pnpm test:e2e`)도 돌리지 마세요. 같은 `.next` 폴더를 덮어써 개발 서버가 깨집니다.
 
 ### `.data` 백업 파일
 
@@ -74,4 +74,11 @@ Claude Code 쪽에서는 dev-team-kit이 설치한 두 스크립트가 이 서�
 | `pnpm test` | Vitest: 단위(`tests/unit`), API(`tests/api`, route handler 직접 호출), 스크립트(`tests/script`, 설치된 `statusline.mjs`를 실행. Linux·macOS 셸 필요) |
 | `pnpm test:e2e` | Playwright(Chromium): 빌드 후 테스트용 서버를 3100·3101 포트에 임시 데이터 폴더로 띄워 화면 흐름, observe.mjs·statusline.mjs 통합, 플랜 사용량 화면 상태를 확인한다. 스크린샷은 `docs/team/reports/screens/qa/` |
 
-E2E에는 Chromium이 필요합니다(`pnpm exec playwright install chromium`). 다른 경로의 Chromium을 쓰려면 `PW_CHROMIUM_PATH`에 실행 파일 경로를 넣습니다. 테스트는 테스트 안에서 만든 토큰·비밀번호만 쓰고, 실제 수집 데이터를 쓰지 않습니다.
+E2E에는 Chromium이 필요합니다(`pnpm exec playwright install chromium`, Linux에서 시스템 라이브러리까지 필요하면 `--with-deps`). 기본 경로는 `/opt/pw-browsers/chromium`이 있으면 그것, 없으면 Playwright가 설치한 Chromium입니다. 다른 경로의 Chromium을 쓰려면 `PW_CHROMIUM_PATH`에 실행 파일 경로를 넣습니다. 테스트는 테스트 안에서 만든 토큰·비밀번호만 쓰고, 실제 수집 데이터를 쓰지 않습니다.
+
+CI(`.github/workflows/ci.yml`)는 push·pull_request마다 Node 22에서 `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test`, `pnpm build`를 돌리고, 이어서 E2E job에서 Chromium을 설치해 `pnpm test:e2e`를 돌립니다. 비밀값은 쓰지 않습니다.
+
+## 운영 문서
+
+- 로컬 운영(시작·정지, 데이터, 로그, 비밀값 교체, 문제 해결): [docs/operations.md](docs/operations.md)
+- 2단계 Vercel 배포 준비 메모(아직 배포하지 않음): [docs/deploy-vercel.md](docs/deploy-vercel.md)
