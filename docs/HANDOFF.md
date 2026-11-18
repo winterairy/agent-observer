@@ -6,7 +6,7 @@
 
 ## 목표
 
-여러 프로젝트에서 도는 Claude Code 세션과 dev-team-kit BOT(책임자, planner, architect, designer, developer, qa, security, devops)의 활동을 한 화면에서 본다. 클라우드 세션도 포함하고, 휴대폰과 다른 PC에서도 본다.
+여러 프로젝트에서 도는 Claude Code 세션과 dev-team-kit BOT(책임자, planner, architect, designer, developer, qa, security, devops, scribe)의 활동을 한 화면에서 본다. 클라우드 세션도 포함하고, 휴대폰과 다른 PC에서도 본다.
 
 - 픽셀 사무실 화면에서 BOT마다 지정한 캐릭터가 움직인다.
 - BOT별 사용한 스킬, 승인 대기 상태를 본다.
@@ -327,7 +327,7 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 ### T1-6. 캐릭터 설정
 
 요구사항
-- `roles.json`: 역할 키(`lead`, `planner`, `architect`, `designer`, `developer`, `qa`, `security`, `devops`) → 표시 이름, 캐릭터 ID. 저장소에는 예시(`roles.example.json` 등)만 커밋한다.
+- `roles.json`: 역할 키(`lead`, `planner`, `architect`, `designer`, `developer`, `qa`, `security`, `devops`, `scribe`) → 표시 이름, 캐릭터 ID. 저장소에는 예시(`roles.example.json` 등)만 커밋한다.
 - 역할 매핑: `agent_type`이 null이면 `lead`. 플러그인 접두사(예: `plugin:planner`)는 접두사를 떼고 찾는다(`vendor/pixel-agent-desk/src/roleConfig.js` 참고). 매핑에 없는 역할은 기본 캐릭터와 `agent_type` 원문 이름으로 보인다.
 - 캐릭터 설정 파일(캐릭터마다): 그림 파일, 한 칸 크기(가로·세로), 줄별 방향·동작, 동작별 프레임 수(그리고 재생 속도, Should).
 - 없는 동작은 정해진 대체 순서로 바꾼다. 대체 순서(D-19): 같은 동작의 요청 방향 → 같은 동작의 down 방향 → 동작 체인(`sit_work → sit → idle`, `walk → idle`, 그 외 → `idle`)의 각 동작에 같은 방향 규칙. 끝까지 없으면 임시 사각형.
