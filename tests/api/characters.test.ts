@@ -110,6 +110,7 @@ describe('GET /api/characters', () => {
       const body = await (await CHARACTERS(get('/api/characters', { cookie }))).json();
       expect(body.roles.lead).toEqual({ displayName: '책임자', characterId: null });
       expect(body.roles.qa).toEqual({ displayName: 'QA', characterId: null });
+      expect(body.roles.scribe).toEqual({ displayName: '문서', characterId: null });
     } finally {
       process.env.OBSERVER_CHARACTERS_DIR = dir;
       await rm(empty, { recursive: true, force: true });

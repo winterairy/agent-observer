@@ -6,5 +6,6 @@
   "developer": { "name": "개발", "character": null },
   "qa": { "name": "QA", "character": null },
   "security": { "name": "보안", "character": null },
-  "devops": { "name": "배포", "character": null }
+  "devops": { "name": "배포", "character": null },
+  "scribe": { "name": "문서", "character": null }
 }
