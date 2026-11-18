@@ -15,6 +15,8 @@ import type { CoreStoreOptions } from '@/store/core';
 import { HOUR, T0, inc } from '../helpers/events';
 
 const DAY_MS = 24 * HOUR;
+// 이벤트는 고정 시각 T0로 만든다. 저장소의 보관 기준 시계도 T0로 고정해야 실제 날짜가 지나도(T0 + 보관 기간 이후) 결과가 같다.
+const fixedClock = () => T0;
 
 const dirs: string[] = [];
 async function tmp(): Promise<string> {
@@ -27,10 +29,10 @@ afterAll(async () => {
 });
 
 const factories: { name: string; make: (opts?: CoreStoreOptions) => Promise<Store> }[] = [
-  { name: 'memoryStore', make: async (opts) => createMemoryStore(opts) },
+  { name: 'memoryStore', make: async (opts) => createMemoryStore({ clock: fixedClock, ...opts }) },
   {
     name: 'fileStore',
-    make: async (opts) => createFileStore({ dataDir: await tmp(), pruneIntervalMs: 0, debounceMs: 5, ...opts }),
+    make: async (opts) => createFileStore({ dataDir: await tmp(), pruneIntervalMs: 0, debounceMs: 5, clock: fixedClock, ...opts }),
   },
 ];
 
@@ -171,11 +173,11 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
 describe('fileStore 파일 동작', () => {
   it('flush 후 새 인스턴스가 같은 상태를 읽는다(재시작 후 유지)', async () => {
     const dataDir = await tmp();
-    const a = createFileStore({ dataDir, pruneIntervalMs: 0 });
+    const a = createFileStore({ dataDir, pruneIntervalMs: 0, clock: fixedClock });
     await a.applyEvent(inc('SessionStart'), applyEvent);
     await a.applyEvent(inc('PreToolUse', { tool: 'Bash' }), applyEvent);
     await a.close();
-    const b = createFileStore({ dataDir, pruneIntervalMs: 0 });
+    const b = createFileStore({ dataDir, pruneIntervalMs: 0, clock: fixedClock });
     const s = (await b.listSessions())[0];
     expect(s.agents.__lead__.currentTool).toBe('Bash');
     // seq도 이어진다
@@ -186,7 +188,7 @@ describe('fileStore 파일 동작', () => {
 
   it('디바운스: 연속 쓰기는 모아서 쓰고 tmp 파일을 남기지 않는다. 파일 권한 0600', async () => {
     const dataDir = await tmp();
-    const store = createFileStore({ dataDir, pruneIntervalMs: 0, debounceMs: 20 });
+    const store = createFileStore({ dataDir, pruneIntervalMs: 0, clock: fixedClock, debounceMs: 20 });
     for (let i = 0; i < 5; i++) await store.applyEvent(inc('PreToolUse', { tool: 'Read' }), applyEvent);
     await new Promise((r) => setTimeout(r, 80));
     const files = await readdir(dataDir);
@@ -204,7 +206,7 @@ describe('fileStore 파일 동작', () => {
     const dataDir = await tmp();
     await writeFile(path.join(dataDir, 'state.json'), JSON.stringify({ schemaVersion: 99, sessions: {}, events: {} }));
     const log = { warn: vi.fn(), error: vi.fn() };
-    const store = createFileStore({ dataDir, pruneIntervalMs: 0, log });
+    const store = createFileStore({ dataDir, pruneIntervalMs: 0, clock: fixedClock, log });
     expect(await store.listSessions()).toEqual([]);
     expect(log.warn).toHaveBeenCalled();
     const files = await readdir(dataDir);
@@ -216,7 +218,7 @@ describe('fileStore 파일 동작', () => {
     const dataDir = await tmp();
     await writeFile(path.join(dataDir, 'state.json'), '{not json');
     const log = { warn: vi.fn(), error: vi.fn() };
-    const store = createFileStore({ dataDir, pruneIntervalMs: 0, log });
+    const store = createFileStore({ dataDir, pruneIntervalMs: 0, clock: fixedClock, log });
     await store.applyEvent(inc('SessionStart'), applyEvent);
     expect((await store.listSessions()).length).toBe(1);
     await store.close();
@@ -227,7 +229,7 @@ describe('fileStore 파일 동작', () => {
     // 부모 프로세스(살아 있음)의 pid
     await writeFile(path.join(dataDir, 'lock'), String(process.ppid));
     const log = { warn: vi.fn(), error: vi.fn() };
-    const store = createFileStore({ dataDir, pruneIntervalMs: 0, log });
+    const store = createFileStore({ dataDir, pruneIntervalMs: 0, clock: fixedClock, log });
     await store.listSessions();
     expect(log.warn.mock.calls.flat().join(' ')).toContain('다른 프로세스');
     expect((await readFile(path.join(dataDir, 'lock'), 'utf8')).trim()).toBe(String(process.pid));
@@ -235,7 +237,7 @@ describe('fileStore 파일 동작', () => {
   });
 
   it('FileStore는 Store 인터페이스 구현이다', async () => {
-    const store: Store = createFileStore({ dataDir: await tmp(), pruneIntervalMs: 0 });
+    const store: Store = createFileStore({ dataDir: await tmp(), pruneIntervalMs: 0, clock: fixedClock });
     expect(store).toBeInstanceOf(FileStore);
     await (store as FileStore).close();
   });
