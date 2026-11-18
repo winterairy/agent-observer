@@ -1,14 +1,18 @@
 {
   "files": {
-    "agents/architect.md": "d06ebde41b4c9871f4f1c510e9d680048881345dad2cafc501124a4031f17221",
-    "agents/designer.md": "d31c5a5da0b7f0b43586994380ac7c4b2282195f09069fd3e199caa4ec711cdd",
-    "agents/developer.md": "b62fbef201f2062f13e944a43ac500fe6cc52253a5d42829fe565ef937c0a251",
-    "agents/devops.md": "fb0e01d262305bb34f983887bf28e9df1bd7fdcd7ef929da22fcc524abe8fb66",
-    "agents/planner.md": "8f650e0c4924544ed72aa38343833e363add6e48455aa78fef3bb39b631c6657",
-    "agents/qa.md": "1f02ec441b1008054cf9f1ea99315425a035956b33ffbc67800d01b23566440c",
-    "agents/security.md": "cc354af5dba1263152c04ba5af558275a30d1856ca394b28bee78d979a0c199c",
-    "commands/task.md": "29844d2abe100170d709c61825f7c165ce7e33534dd69e7b62d3b74e19903b68",
-    "commands/team-init.md": "6e68f242bbce15bee9648da2135a682856fe4a2d3860369e20c43f01229c678a",
+    "agents/architect.md": "b386c0cbd06905bb91f295b902fc1d409bbb5d11dff311d07130c4541cb089ee",
+    "agents/designer.md": "ecbc7ba75053ee3ba4e64c5901f187e395017aee507eaf451fff43c1164a55fb",
+    "agents/developer.md": "c351d9620c16e3e41182ebd1809a0cc0ba8252720d8b2f9ed20c0d00b4e1ffc2",
+    "agents/devops.md": "3fd35054d7d712c0957cdf5c4f7f6ecbb4420b78cfd2bdedba880ca5e20fdbd5",
+    "agents/planner.md": "1e8e3e8b4e18a574aecf31c9df8da0ac5b856db0d8883f5cde41693140448fa3",
+    "agents/qa.md": "1a8fbcdfc5bf10ca7e6e14e9f9473c32af5ac6f10603cf3ce4be47795e3e02d6",
+    "agents/scribe.md": "16fe7df7ee37f7fe1b3b313b650315ee26bcd1be6b624ab0e46634f64ef26628",
+    "agents/security.md": "f537a4e887855bacadcc15d6fe51d68520db77eb21dc3bfce1b0d949ba796ba1",
+    "commands/task.md": "1fbc01c852f733a421ab1501e110b6cce011f7b2928ecf5356ed05b78f8e40d2",
+    "commands/team-init.md": "13cec24d7563278dfdc1146913784edb7d4f53671eb281b1b94e86854f8d4ec3",
+    "skills/caveman/LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "skills/caveman/NOTICE": "cc5a17111550fae2ec5c155f16d2fea1a0a0a43a1bc5768eccab78b7733e7f0a",
+    "skills/caveman/SKILL.md": "415d43518f2b1a9498c15a445d4657117b129ee5e81b19454ce348439cc6672b",
     "team/checklists/release-docker.md": "562e481ba26fb4efd63ee85433ef0090131696305ecd64ee53ac984de5205846",
     "team/checklists/release-electron-builder.md": "d011c9d76b868f0b4c7bf4be7294a3f898d2881287ce21a9a939fe14d99ffaa9",
     "team/checklists/release-npm-package.md": "0bb6c25fd7e0cd2db975002705188ac7ba22c7fa45d2d6017a97f7daaf41d2d7",
@@ -16,11 +20,12 @@
     "team/checklists/security-electron.md": "47397f29bd5d60aa7313c9ce9eaa22a358ef1cccf8fca8d7d0109847a5927505",
     "team/checklists/security-node-cli.md": "680da2daa13b3602165ce1c0ae9df893e968415a1775ea9175f8808258093008",
     "team/checklists/security-web.md": "fc4eb5eadacd11209787942969e3bfcccfe3acfd42e9585031ceb5a9c73b2dde",
+    "team/guard/guard.mjs": "039c064308fa22a1d3d11dd737f3c01e488e6f3fe1abe9af0105363177b1c563",
     "team/observe/observe.mjs": "1ba7e501de757446ff9b75f2487f2ba46230a4eeddd2392faa925adc74b4acd1",
     "team/observe/statusline.mjs": "74107e02d6846d25abb1f751e23648430fac3aecca11aa10eb2568666703b53b",
-    "team/process.md": "b2e620e152f4f109953177c523e487084f106014f88b97e6ba298f984c0046d5",
-    "team/profile.template.md": "050e2c9ffd7cc25f8a47d00a55225f9881d77a5009a798aafe54f9f7921329ba",
+    "team/process.md": "03a7fd4fcb0610be308fa0b84eaa051224a0fc6d2c9f7f6a12deb1dae93e8374",
+    "team/profile.template.md": "9b01dfaff36b5938859a60e01ba51284b0630f5c52148e5410cf54ac7cf54fe8",
     "team/templates/DESIGN.md": "03d5a40eb791cfb509849575236de5c6e47a195683d633a7048b130089a759f6",
-    "team/templates/status.md": "b379abd3b35cd5dfac456877f4f2925568e5cd5be5fa5ec803837769c88fbc2a"
+    "team/templates/status.md": "092bd8ce5264c7a0e52703df2a8e5962e3a5143cb8afb1e4fc6527f123b95dfe"
   }
 }
