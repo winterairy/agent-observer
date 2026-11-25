@@ -493,7 +493,379 @@ QA용 이벤트 순서별 기대 상태. 세션 S1, 서브에이전트 A1(`agent
 
 2026-11-12 개정(사용자 결정 반영): statusLine 멈춤·재개(6.1), 재전송(D-23)·"오래됨" 상태 삭제(6.4), 저장 형식 v1→v2 변환 삭제(3절), 부모 Agent 도구의 `subagent` 필드 처리 삭제(2절·5절·16절), 화면 테스트의 가짜 응답 삭제(6.6).
 
-개발 BOT이 이번 개정에서 볼 곳: **16절 "토큰·비용 코드 제거 대상"**(이미 구현된 코드에서 지울 것)과 **6절 "플랜 사용량"**(새로 만들 것). 나머지 절은 바뀐 부분만 고쳤다.
+2026-11-25 개정(실제 로컬 세션 연결 결과 LIVE-01~05): **0절**에 요약, 달라진 점(이전 → 이후), 제거·변경 대상 표(파일 단위), LIVE별 설계, 기획 수정 필요·운영 문서 수정 필요·사용자 결정 필요·dev-team-kit 변경 목록을 모았다. 0절이 아래 절과 다르면 0절이 우선한다. 개발 BOT은 **0.3절**부터 따른다.
+
+개발 BOT이 2026-11-12 개정에서 본 곳(완료): **16절 "토큰·비용 코드 제거 대상"**(이미 구현된 코드에서 지울 것)과 **6절 "플랜 사용량"**(새로 만들 것). 나머지 절은 바뀐 부분만 고쳤다.
+
+### 0. 2026-11-25 개정: 실제 로컬 세션 연결 결과 반영 (LIVE-01~05)
+
+작성: architect, 2026-11-25. 입력: `docs/team/reports/live-connection-2026-11-25.md`(Windows 11, Node 25, 실제 Claude Code 세션), `docs/team/design-options-live05.md`(designer의 LIVE-05 선택지, 선택 대기), 설치본 `.claude/team/observe/observe.mjs`·`statusline.mjs`(dev-team-kit 0.1.5), 현재 코드.
+**이 절이 아래 1~16절과 다르면 이 절이 우선한다.** 충돌하는 옛 문장에는 "(2026-11-25 개정: 0.x절 우선)" 표시만 달았다. 기획(Task·수용 기준·결정 필요 D 표)·DESIGN.md·화면 명세는 고치지 않았고, 충돌·필요 변경은 0.8절 "기획 수정 필요"에 모았다. 새 런타임 의존성은 없다(0.12절).
+
+#### 0.1 요약
+
+| LIVE | 설계 상태 | 핵심 |
+|---|---|---|
+| LIVE-04 (High) | **구현 가능** | 처음 보는 `agent_id`는 "활동 증거" 이벤트(SubagentStart, PreToolUse, PostToolUse, permission_prompt)일 때만 BOT을 만든다. SubagentStop 등만 온 에이전트는 **만들지 않고** 이벤트 전체를 무시한다(숨김 아님). 서브에이전트가 done·ended가 되고 **60초**(제안 D-31)가 지나면 목록·사무실 DTO에서 뺀다(조회 때 계산, 저장·스킬·BOT 호출 기록은 유지). 같은 역할 합치기는 서버가 하지 않는다(화면 몫, 결정 필요) |
+| LIVE-03 (Medium) | **구현 가능** | 서버가 `usage.model`(모델 이름 한 값만, 토큰 수는 계속 버림)을 읽어 에이전트·세션 모델을 **모든 이벤트에서** 갱신한다. 설치된 observe.mjs를 고치지 않아도 된다. payload `model` 필드 방안은 채택하지 않되, 서버는 최상위 `model`도 같은 칸으로 받는다 |
+| LIVE-01 (Medium) | **구현 가능**(dev-team-kit) | 전송 **시도**와 전송 **성공**을 나눠 기록한다. `lastSent`는 분리된 전송 자식이 2xx를 받은 뒤에만 쓴다. 실패하면 기록이 없으므로 1분 뒤 다음 실행에서 같은 값을 다시 시도한다 |
+| LIVE-02 (Medium) | 진단 절차 확정, **수정은 결과에 따라** | `AGENT_OBSERVER_DEBUG=1`로 `/usage`·stdin `rate_limits`·보낸 값·서버 값을 같은 시각에 비교한다(0.6절). 2026-11-12 결정을 바꾸는 수정(같은 값 재전송, `refreshInterval`)은 **결정 변경 필요**로 분리했다(0.10절). 임의로 확정하지 않았다 |
+| LIVE-05 (요구) | **결정 대기** | 기획·디자인 결정 전. 선택지별 데이터·API 영향과 조회 API 후보, 폴링 비용만 설계했다(0.7절) |
+
+진행 순서: LIVE-03·04 서버 변경은 LIVE-05 결정과 독립이므로 먼저 한다(DTO에 필드만 더하므로 화면 변경 없음). LIVE-01 kit 변경은 다른 세션에서 병행한다. LIVE-02는 지금 설치본(0.1.5)의 stdin 로그만으로도 진단을 시작할 수 있다. LIVE-05는 결정 뒤 0.7절을 확정하고 designer 명세로 넘긴다.
+
+#### 0.2 달라진 점 (이전 → 이후)
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| 처음 보는 `agent_id`의 BOT 생성(R12) | 아무 이벤트나 만든다. SubagentStop만 와도 `done` BOT이 생김 | SubagentStart·PreToolUse·PostToolUse·permission_prompt만 만든다. 그 밖의 이벤트는 R12a로 **통째로 무시**(세션도 만들지 않음) |
+| 새 에이전트가 PostToolUse로 처음 보일 때 | `done`으로 생성(R4가 `done`에는 적용 안 돼 `done` 그대로) | `thinking`으로 생성 |
+| 끝난 BOT의 표시 | `done` 30분, `working`·`thinking` 10분 뒤 `ended`가 돼도 상세 목록에는 계속 남음 | 서브에이전트는 done·ended가 되고 60초(유예) 지나면 상세·사무실·`agentCount`에서 제외(R14). lead는 항상 남음 |
+| 숨겨진 BOT의 스킬·호출 기록 | 상세의 BOT 행에 붙어 있음 | 저장·`/api/skills` 그대로. 상세에는 BOT 행이 사라지므로 세션 합계 `skillTotals`를 더함 |
+| 모델 출처 | `SessionStart.model`만(세션 하나) | 모든 이벤트의 `usage.model`(또는 최상위 `model`). **BOT별** 모델도 가짐. `/model` 변경·SessionStart 누락도 다음 usage 이벤트에서 반영 |
+| `usage` 처리 | 어떤 형식이든 검사 없이 통째로 버림 | 여전히 검사하지 않고 400도 없다. 단 `usage.model` 문자열 하나만 읽어 쓰고 나머지(토큰 수 전부)는 버림 |
+| reducer·저장소 계약 | 항상 `SessionState`를 돌려줌 | 무시할 이벤트면 `null`을 돌려주고 저장소는 아무것도 바꾸지 않음. `/api/events`는 202 `{"ok":true,"session":null,"ignored":true}` |
+| statusLine 전송 기록 | 보내기 **전에** `lastSent` 기록(실패해도 "보냄") | 시도 시각(`lastAttemptAt`)만 먼저, `lastSent`는 **2xx 확인 뒤** 전송 자식이 기록. 실패하면 다음 실행에서 재시도 |
+| 전송 자식의 결과 | 버림(`-o /dev/null`, 종료 코드 무시) | HTTP 상태 코드를 읽어 성공만 기록. `AGENT_OBSERVER_DEBUG=1`이면 시도·결과·건너뜀 사유를 로그 파일에 남김 |
+| 사무실 | 선택한 세션의 BOT만(3열 중 하나) | **미정**(LIVE-05 결정 대기). 데이터 후보만 0.7절에 |
+
+#### 0.3 제거·변경 대상 (파일 단위, 개발 BOT 작업 순서)
+
+완료 기준: `pnpm typecheck`·`pnpm test`·`pnpm build`·`pnpm test:e2e -- --trace off` 통과. 화면 컴포넌트(`src/ui/*`)는 LIVE-05 결정 전까지 **고치지 않는다**(DTO가 이미 유예·모델을 반영해 내려주므로 `Office.tsx`·`SessionDetail.tsx`는 그대로 동작한다).
+
+서버 코드(이 저장소)
+
+| # | 파일 | 할 일 | LIVE |
+|---|---|---|---|
+| C-1 | `src/config.ts` | 상수 `subagentDoneGraceMs: 60 * SECOND` 추가(한곳 규칙). 모델 길이 제한은 기존 문자열 256자(D-2)를 재사용 | 04 |
+| C-2 | `src/domain/types.ts` | `AgentState.model: string \| null` 추가(저장 파일에 없으면 읽을 때 `?? null`, **schemaVersion은 2 그대로**: 선택 필드 추가라 변환·백업이 필요 없다). `NormalizedEvent.model` 주석을 "SessionStart일 때"에서 "모든 이벤트(`usage.model` 또는 최상위 `model`을 합친 값)"로. `SessionState.model` 주석 "SessionStart.model"을 "lead의 최신 모델"로 | 03 |
+| C-3 | `src/collect/schema.ts` | `usage`를 `z.unknown().optional()`로 받는다(형식 검사 없음, D-21 유지). `parsePayload`가 `usage`가 객체이고 자기 속성 `model`이 문자열이면 `cleanModel`로 정리해 `event.model`(최상위 `model`이 있으면 그것 우선)에 넣고, `usage` 객체는 NormalizedEvent에 **넣지 않는다**. `cleanModel`: trim, 1~256자, `<`로 시작해 `>`로 끝나는 값(예: `<synthetic>`)은 실제 모델이 아니라 null. 문자열이 아니면 null(400 없음). 머리 주석 4행("usage·subagent는 검증 없이 버려진다")을 "usage는 model 이름만 읽고 버린다"로. `subagent`는 계속 스키마에 없음 | 03 |
+| C-4 | `src/state/reducer.ts` | ① 반환형 `SessionState \| null`. ② R12 재정의: 대상 에이전트가 처음 보는 `agent_id`이면 `SubagentStart`(thinking)·`PreToolUse`(working)·`PostToolUse`(thinking)·`Notification`의 `permission_prompt`(waiting)일 때만 만든다. 그 외 이벤트는 R12a로 **함수 맨 앞에서 `null` 반환**(세션 생성·`lastEventTs`·`dismissedAtTs`·`ended` 어느 것도 건드리지 않음). ③ PostToolUse로 새로 만들 때 `thinking`(R4 보정). ④ `!stale` 분기에서 `ev.model`이 있으면 `agent.model = ev.model`, lead이면 `s.model`도 같은 값(기존 149행의 "SessionStart일 때만" 조건 삭제). ⑤ `newAgent`에 `model: null`. ⑥ 머리 주석에 R12·R12a·모델 규칙 | 03·04 |
+| C-5 | `src/store/Store.ts`, `src/store/core.ts` | `Reducer`와 `Store.applyEvent`의 반환형을 `SessionState \| null`로. `core.applyEvent`는 `fn`이 `null`이면 **seq 증가·이벤트 보관·스냅숏 쓰기·디바운스 저장 예약을 모두 건너뛰고** `null`을 돌려준다(memoryStore·fileStore가 core를 쓰므로 구현별 변경 없음, 구현 때 확인) | 04 |
+| C-6 | `src/collect/ingest.ts`, `app/api/events/route.ts` | `IngestResult`의 `session`이 `SessionState \| null`. route는 `null`이면 202 `{"ok":true,"session":null,"ignored":true}`(로그 없음) | 04 |
+| C-7 | `src/state/status.ts` | 순수 함수 `isListedAgent(agent, now, graceMs)` 추가: `agentId === null`이면 true. `effectiveStatus`가 waiting·working·thinking이면 true. done·ended이면 `now - agent.lastEventTs <= graceMs`(경계는 "초과" 시 제외, D-6과 같은 규칙). 기본 graceMs는 `config.subagentDoneGraceMs` | 04 |
+| C-8 | `src/query/views.ts` | `sessionDetailView`: agents를 `isListedAgent`로 거르고, `AgentView.model`(없으면 null) 추가, `session.model`은 lead 에이전트의 `model ?? s.model`, 응답에 `skillTotals`(= 이 세션 하나에 대한 `skillsView` 결과, 숨겨진 BOT 포함)와 `hiddenAgentCount` 추가. `sessionListItem.agentCount`는 listed 에이전트 수. `sessionStatus`·`waitingCount`는 **전체 에이전트 기준 그대로**(숨겨진 것은 비활성이라 결과가 달라지지 않는다). 머리 주석에 R14 | 03·04 |
+| C-9 | `src/ui/types.ts` | 타입이 `views.ts`를 다시 내보내면 변경 없음. 아니면 `AgentView.model`, `skillTotals`, `hiddenAgentCount` 추가(필드만, 화면 표시는 하지 않음) | 03·04 |
+| C-10 | `README.md` | "현재 구현 범위"에 모델 갱신·내부 에이전트 무시·완료 BOT 60초 제외 한 줄씩. `usage`를 "토큰은 저장하지 않고 모델 이름만 읽는다"로 | 03·04 |
+
+테스트(이 저장소)
+
+| # | 파일 | 할 일 |
+|---|---|---|
+| T-1 | `tests/unit/state.test.ts` | "R12" 테스트에서 `SubagentStop(A8)`이 `done` 에이전트를 만든다는 단언을 삭제하고 "`null` 반환, 입력 세션 불변"으로 바꾼다(permission_prompt로 만드는 단언은 유지). R12를 4개 생성 이벤트와 무시 이벤트(SubagentStop, idle_prompt)로 나눠 검증. R13: "R12a로 무시되는 이벤트는 세션을 만들지 않는다" 추가. S-05의 마지막 기대("A1은 목록에 남고")는 reducer 상태 기준이라 그대로(표시는 T-2). 새 시나리오 S-15~S-22(0.4·0.5절) 추가. 제목·머리 주석의 "R1~R13"을 "R1~R14"로 |
+| T-2 | `tests/unit/agentVisibility.test.ts`(새 파일) | `isListedAgent`: lead는 항상 true, waiting은 24시간이 지나도 true, working·thinking(10분 안) true, done 60초 정각 true·60.001초 false, ended(SessionEnd 직후 60초 안) true·그 뒤 false, 10분 넘은 working(=ended)은 즉시 false. `now`를 인자로 주입 |
+| T-3 | `tests/unit/store.test.ts` | reducer가 `null`을 돌려주면 seq·이벤트 목록·스냅숏이 그대로이고 `applyEvent`가 `null`을 돌려준다(memory·fileStore 모두, 파일은 디바운스 뒤 다시 읽어도 같음) |
+| T-4 | `tests/api/events.test.ts` | ① 새 세션에 `SubagentStop`(`agent_type` null)만 보내면 202 `ignored:true`이고 `/api/sessions`에 세션이 없다. ② 기존 세션에 보내면 202 `ignored:true`이고 에이전트 수·`lastEventAt` 불변. ③ `usage.model`이 세션·BOT 모델이 되고 저장된 이벤트·응답 텍스트에 `"usage"`, `cache_read`, `cache_creation`, `messages`, 토큰 수가 없다(기존 R-13 단언 유지). ④ `usage`가 문자열·배열·`model`이 숫자·300자여도 202(D-21). ⑤ `model: "<synthetic>"`은 무시. ⑥ 최상위 `model`과 `usage.model`이 둘 다 있으면 최상위 우선. ⑦ `subagent.usage.model`은 모델이 되지 않는다 |
+| T-5 | `tests/api/query.test.ts` | S-05 상세 테스트: `at(T0 + 20_000)`의 기대(lead·qa 2개, `agentCount: 2`)는 유예 안이라 유지. 유예 뒤(`at(T0 + 6_000 + 60_001)`)에는 agents가 lead 하나, `agentCount: 1`, `hiddenAgentCount: 1`, `skillTotals`에 `playwright-cli` 1회가 남는 단언 추가. 모델 단언: `agents[i].model` |
+| T-6 | `tests/api/protoKeys.test.ts` | 수정 없음 예상(`agent_id`가 든 `PreToolUse` 계열 이벤트라 R12로 생성됨). 실행해서 확인 |
+| T-7 | `e2e/flow.spec.ts`(또는 새 `e2e/office-agents.spec.ts`) | 실제 서버에 `ts`를 과거로 보내 만든다: SubagentStart·SubagentStop을 2분 전·110초 전으로 보낸 BOT은 사무실·상세에 없고, 10초 전에 끝낸 BOT은 쉬는 곳에 있다. SubagentStop만 보낸 `agent_id`는 BOT 수에 안 잡힌다. 서버 시계는 바꾸지 않는다 |
+| T-8 | `e2e/qa-stage1.spec.ts`, `e2e/flow.spec.ts` 기존 케이스 | 영향 없음 예상(서브에이전트가 모두 활성이거나 유예 안). 확인만 |
+| T-9 | `tests/script/statusline.test.ts` | **kit 변경이 머지되고 설치기를 다시 실행해 사본이 갱신된 뒤에** 고친다(이 저장소에서 사본을 손으로 고치지 않는다). 0.6.5절 목록 |
+
+문서(설계 BOT 범위): 이 절. 아래 옛 절의 충돌 지점 표시 7곳.
+
+#### 0.4 LIVE-04: BOT 생성·표시 규칙 재설계
+
+**원인(코드 확인)**: `reducer.ts`의 R12는 처음 보는 `agent_id`면 이벤트 종류와 상관없이 `newAgent`를 만든다. Claude Code 내부 보조 에이전트가 `SubagentStop`만 부르면 `agent_type: null`, 상태 `done`인 BOT이 생기고 `defaultRoleResolver(null)`이 이를 "책임자"로 표시한다. `done`은 30분 동안 `ended`가 되지 않고, 상세·사무실이 `ended`가 된 뒤에도 에이전트를 목록에서 빼지 않는다.
+
+**결정 1: 만들지 않는다(숨김 플래그 아님).** 이유
+1. 내부 에이전트는 사용자에게 의미 있는 정보가 없다(도구·스킬·상태 없음). 숨김 플래그는 소비자가 없는 필드를 DTO·테스트·`agentCount`에 퍼뜨린다.
+2. 만들면 `state.json`에 계속 쌓인다(보고서: 계속 추가). 만들지 않으면 저장 증가가 없다.
+3. 블랙리스트("`agent_type`이 null이면 내부")는 내부 에이전트가 나중에 `agent_type`을 갖거나 도구 이벤트를 내면 깨진다. "활동 증거가 있는 이벤트만 만든다"는 화이트리스트라 이런 변화에 안전하다.
+4. 진단 근거: 무시한 이벤트는 저장하지 않지만 `AGENT_OBSERVER_DEBUG`(보내는 쪽)와 202 `ignored:true`로 확인할 수 있다.
+기각한 대안: (a) 숨김 플래그 `internal: true` 저장 → 위 이유 1·2. (b) `agent_type`이 null인 SubagentStop만 거르기 → 이유 3. (c) observe.mjs(보내는 쪽)에서 거르기 → 서버 규칙이 어차피 필요하고 kit 버전이 섞이므로 서버가 맡는다(0.11절 K-6에 선택 사항으로만).
+
+**상태 전이표 변경(T1-2의 R1~R13 기준)**
+
+| # | 이전 | 이후 |
+|---|---|---|
+| R8 | SubagentStart, `agent_id` 있음, 없음 → 생성·생각 중 | 변경 없음. R12의 생성 이벤트 중 하나 |
+| R9 | SubagentStop, 모두 → 해당 서브에이전트 완료 | **기존 에이전트에만** 적용. 처음 보는 `agent_id`는 R12a |
+| R12 | 처음 보는 `agent_id`의 아무 이벤트 → 생성하고 그 이벤트 규칙 적용 | 처음 보는 `agent_id`의 이벤트가 SubagentStart → 생성·생각 중 / PreToolUse → 생성·작업 중(도구 기록) / PostToolUse → 생성·**생각 중** / Notification `permission_prompt` → 생성·승인 대기. 그 밖은 R12a |
+| R12a (신규) | 없음 | 위 목록 밖 이벤트(SubagentStop, idle_prompt 등 다른 Notification, 그 외)가 처음 보는 `agent_id`에 오면 **이벤트 전체 무시**: 에이전트·세션을 만들지 않고, 기존 세션이면 `lastEventTs`·`ended`·`dismissedAtTs`·스킬 기록도 바꾸지 않으며 저장소에도 남기지 않는다 |
+| R13 | 처음 보는 `session_id`의 아무 이벤트 → 세션 생성 | R12a로 무시되는 이벤트는 제외(세션을 만들지 않는다) |
+| R14 (신규, **표시 규칙, 상태 전이 아님**) | 없음 | 서브에이전트(`agent_id` 있음)가 조회 시점에 done·ended이고 `now - lastEventTs > 60초`이면 상세·사무실 목록·`agentCount`에서 뺀다. lead·waiting·working·thinking은 빼지 않는다. 같은 `agent_id`에 새 이벤트가 와 활성이 되면 다시 보인다. 저장값·스킬·BOT 호출 기록은 그대로 |
+| R1~R7, R10, R11, R11a | | 변경 없음 |
+
+**유예 값(제안 D-31): 60초.** 근거: 3초 폴링에서 20번 확인할 기회라 "방금 끝났다"를 볼 수 있고, designer 제안(`design-options-live05.md` 2.1, Q-5)과 같다. 대안: 0초(곧바로. 짧게 끝난 BOT은 화면에 한 번도 안 보일 수 있고 사무실의 "완료" 연출이 없다), 5분(쉬는 곳이 붐빈다). 값은 `config.subagentDoneGraceMs` 한 곳이라 바꾸기 쉽다. 사용자 결정 Q-5에서 확정한다(0.10절).
+- `ended` BOT(SessionEnd, 시간 초과)은 같은 규칙으로 60초 뒤 빠진다. 시간 초과로 `ended`가 된 것은 이미 10분이 지났으므로 그 순간 바로 빠진다.
+- 기존 `.data/state.json`에 이미 쌓인 유령 BOT(`done`, `agent_type` null)은 마이그레이션 없이 R14로 자동으로 사라진다(2026-11-12 "변환하지 않는다" 결정과 일치).
+- 저장소 `agents`에서 오래된 서브에이전트를 지우는 정리는 **하지 않는다**: 이제 유령이 생기지 않아 증가량이 작고, 스킬·호출 기록이 에이전트 키에 묶여 있어 지우면 일관성 규칙이 늘어난다. 실제로 커지면 `prune`에 더한다.
+
+**같은 역할 BOT을 한 자리로 합칠지**: 서버는 합치지 않는다(에이전트 단위 저장·DTO 유지). 이유: 병렬로 도는 같은 역할 BOT은 각자 현재 도구·승인 대기가 다르고, 승인 대기가 합쳐져 가려지면 안 된다. 합치기는 화면이 DTO의 `role`로 묶으면 되므로 서버 변경이 없다.
+- 영향(합칠 때): 사무실 좌석 수 감소(좌석 초과 문제 완화), 대표 상태는 우선순위(승인 대기 > 작업 중 > 생각 중 > 완료)로 정하고 `×N`과 개별 상태는 툴팁에. 한 BOT의 `currentTool`·모델·스킬은 대표 하나만 보이거나 툴팁 목록이 필요(DTO에는 이미 개별 값이 있음). 승인 대기는 합치지 않는 대안(designer 2.2).
+- 영향(합치지 않을 때): 병렬 호출이 많으면 아바타가 늘어난다. R14 때문에 순차 호출의 끝난 BOT은 60초 뒤 사라져 중복이 크게 줄어든다.
+- 전 세션 개요 API(0.7절)를 서버에서 합쳐 내려주면 응답은 줄지만 개별 상태를 잃는다. 제안: 합치기는 화면 규칙으로 두고 서버는 에이전트 단위로 준다. **결정 필요 Q-6**.
+
+**시나리오·전이표 영향 목록(기획 문구는 바꾸지 않았다. 0.8절)**
+
+| 위치 | 영향 |
+|---|---|
+| R8, R9, R12, R13 | 위 표대로 재정의 |
+| R14 | 신규 |
+| S-05 | 끝 문구 "A1은 목록에 남고 상태 완료"는 "상태 완료로 **저장**되고 60초 동안 목록에 남는다"로. reducer 상태 기대는 그대로 |
+| S-06 | 변경 없음(PreToolUse로 생성, 작업 중) |
+| S-08 | A1은 ended로 저장(변경 없음), 60초 뒤 목록에서 빠짐을 추가 |
+| S-09, S-10, S-12, S-13, S-14 | 변경 없음 |
+| S-15 (신규) | 기존 세션에서 lead가 활동 중일 때 `SubagentStop(X, agent_type null)`만 도착 → X 없음, 세션 상태·`lastEventTs`·`agentCount` 불변, 202 `ignored:true` |
+| S-16 (신규) | 처음 보는 세션에 `SubagentStop`만 도착 → 세션이 만들어지지 않음 |
+| S-17 (신규) | SubagentStart(A1) → SubagentStop(A1): 59초·60초(정각)에는 목록에 있고 60.001초에는 목록에서 빠지며 저장 상태는 done, 세션 스킬 합계는 유지 |
+| S-18 (신규) | 처음 보는 A1에 PostToolUse가 먼저 → A1 생성, 생각 중 |
+| S-19 (신규) | 처음 보는 A1에 Notification(idle_prompt) → 생성 안 됨 / permission_prompt → 생성, 승인 대기 |
+| S-20 (신규) | S-17로 빠진 A1에 같은 `agent_id`로 PreToolUse → 다시 목록에 보임(작업 중) |
+| S-21 (신규) | 서브에이전트가 작업 중인 상태에서 SessionEnd → 세션·lead·A1 종료, A1은 60초 뒤 목록에서 빠지고 lead는 남음 |
+| S-22 (신규) | 모델(0.5절) |
+| 수용 기준 "R1~R13 각각 1개 이상", "S-01~S-14" | R14와 S-15~S-22를 포함하도록 늘림 |
+
+보존 확인: 빠진 BOT의 스킬은 `skills`·`agentCalls` 스냅숏에 그대로 있다(T1-3 "SubagentStop 후에도 기록이 남는다" 유지). `/api/skills`는 에이전트 목록이 아니라 스냅숏에서 집계하므로 변하지 않는다. 상세는 `skillTotals`로 세션 합계를 보여 줄 수 있다.
+
+#### 0.5 LIVE-03: 세션·BOT 모델 전달
+
+**후보 비교**
+
+| 기준 | (A) 서버가 `usage.model`을 읽음 | (B) payload에 `model` 필드를 더함(observe.mjs 변경) |
+|---|---|---|
+| 지금 설치본(0.1.5)에서 동작 | **즉시**. observe.mjs가 PostToolUse·Stop·SubagentStop·SessionEnd에 이미 `usage.model`(transcript의 마지막 assistant 메시지 모델)을 보낸다 | kit 수정·배포·모든 PC 재설치 뒤에야. 그동안은 계속 null |
+| dev-team-kit 변경 | 없음 | 있음(다른 세션) |
+| D-21("usage는 검사 없이 버린다")·T1-1·profile 규칙과의 충돌 | 있음. "usage를 저장하지 않는다"가 "토큰은 저장하지 않고 모델 이름만 읽는다"로 바뀐다(0.8절) | 없음(필드가 `usage` 밖) |
+| 오래된 kit 호환 | 오래된 kit도 usage를 보내면 동작 | 오래된 kit은 model을 못 보냄 |
+| 정보 신선도 | usage 이벤트가 있을 때만(PreToolUse·UserPromptSubmit에는 없음) | 같은 수준(같은 transcript를 읽음) |
+
+**결정: (A)** 서버가 `usage.model`을 읽는다. 이유: 설치본이 이미 보내고 있어 이번 연결의 문제를 kit 변경 없이 풀고, 충돌은 문서 문구(기획) 수정으로 해소된다. 모델 이름은 토큰 수가 아니며 "토큰·비용을 저장하지 않는다"는 사용자 결정(2026-11-11)의 목적(토큰 사용량 측정 폐기)에 어긋나지 않는다. 또 서버는 최상위 `model`도 같은 칸으로 받는다(스키마에 이미 있음): 나중에 kit이 (B)를 추가해도 서버 변경이 없다.
+
+**규칙**
+- 값: `usage.model`(또는 최상위 `model`)에서 `cleanModel`을 거친 문자열 하나. `<synthetic>`처럼 꺾쇠로 감싼 값은 모델이 아니므로 무시(실제 transcript로 확인할 것). 문자열이 아니거나 길면 null → 모델 갱신 없음. `usage`의 나머지(`input`, `output`, `cache_*`, `messages`)는 읽지도 저장하지도 않는다. `subagent.usage.model`은 계속 버린다(2026-11-12 결정).
+- 적용: `agent_id`가 있으면 그 BOT의 `AgentState.model`, 없으면 lead의 `AgentState.model`과 `SessionState.model`. **모든 이벤트·`!stale`일 때만** 덮어쓴다(늦게 온 옛 이벤트의 모델이 최신을 덮지 않게). 모델이 없는 이벤트는 기존 값을 유지한다.
+- `/model`로 세션 도중 바꾼 경우: 다음 usage 이벤트(도구가 끝나거나 Stop)의 마지막 assistant 메시지 모델로 바뀐다. 바꾼 직후 응답이 오기 전에는 이전 모델이 보인다(한계, 허용).
+- SessionStart를 놓친 세션(수집 설정 전에 시작): 첫 usage 이벤트 전까지 `null`("알 수 없음"). 첫 PostToolUse·Stop에서 채워진다. 서버가 더 할 수 있는 것은 없다.
+- BOT별 모델: 서브에이전트의 PostToolUse·SubagentStop이 서브에이전트 transcript의 모델을 보낸다. SubagentStart에는 없으므로 첫 도구가 끝날 때까지 null.
+- 응답: `AgentView.model`(null 가능), `session.model` = lead의 모델. 표시 방법(원문 ID 그대로 vs 이름 변환)은 designer 몫.
+- 시나리오 S-22: SessionStart 없이 PostToolUse(`usage.model` M1) → lead·세션 모델 M1 / 이어 M2 → M2 / 모델 없는 이벤트 → M2 유지 / `ts`가 더 이른 늦은 이벤트의 M0 → 무시 / 서브에이전트의 usage.model M3 → 그 BOT만 M3 / `<synthetic>` → 무시.
+
+**기획과의 충돌(0.8절에 정리)**: D-21(확정, 2026-11-12) "검사하지 않고 버린다", T1-1 요구 "`usage`와 `subagent.usage`는 받되 저장하지 않는다"와 수용 기준 "저장된 데이터·조회 결과 어디에도 토큰 수가 없다"(→ 문자 그대로는 위반하지 않지만 "usage를 저장하지 않는다"는 요구 문장과 profile.md 기타 규칙은 바뀌어야 함), T1-5 "모델(SessionStart의 `model`)".
+
+#### 0.6 LIVE-01·LIVE-02: statusline.mjs 재전송과 지연 진단 (dev-team-kit 쪽 변경)
+
+##### 0.6.1 LIVE-01: 전송 성공을 확인한 뒤에만 기록 (구현 가능)
+
+**원인(설치본 확인)**: `claimSend`가 `lastSent`를 **보내기 전에** 쓰고, 전송 자식은 `curl -o /dev/null`로 결과를 버린다. 자식이 실패해도(서버 꺼짐, 컴파일 중 5초 초과) 기록은 "보냄"이라 같은 값이면 다시 보내지 않는다.
+
+**상태 파일 v2** `tmpdir/dev-team-kit-observe/plan-usage.json`
+
+| 필드 | 의미 | 쓰는 곳 |
+|---|---|---|
+| `v` | 2 | |
+| `lastAttemptAt` | 마지막 전송 **시도**를 시작한 시각(ms). 1분 1회 제한의 기준 | 부모(`claimAttempt`, 잠금 안) |
+| `lastSent` | **서버가 2xx로 받은** 마지막 창별 값 | 전송 자식(성공 때만) |
+| `lastSentAt` | 위 성공 시각(ms) | 전송 자식(성공 때만) |
+- v1 파일(`lastSentAt`, `lastSent`만 있음)을 읽으면 `lastAttemptAt = lastSentAt`으로 본다(변환 없이 호환).
+
+**순서**
+1. `decideSend(state, current, nowMs)`(순수, 시그니처 유지): ① 시도 간격: `now - (lastAttemptAt ?? lastSentAt)`이 60초 미만이면 false(시계 역행은 Infinity로, 지금과 같음). ② `current`의 창 중 하나라도 `lastSent`와 다르면(또는 `lastSent`가 없으면) true. 값이 같으면 얼마가 지나도 false(재전송 없음 = 2026-11-12 결정 유지).
+2. `claimSend` → `claimAttempt`: 잠금(`plan-usage.lock`, O_EXCL, 10초 만료)을 얻고 상태를 다시 읽어 `decideSend`를 한 번 더 판단한 뒤 **`lastAttemptAt = now`만 쓰고** 잠금을 푼다(`lastSent`·`lastSentAt`은 건드리지 않는다). true면 전송 자식을 띄운다(지금과 같은 분리 실행).
+3. 전송 자식(`--send`): HTTP 상태를 읽는다 — `curl -sS -m 5 -o <널 장치> -w %{http_code}`를 stdout 파이프로 받는다. 널 장치는 POSIX `/dev/null`, Windows `NUL`(**구현 시 확인**: Windows `curl.exe`에서 `-o /dev/null`이 어떻게 동작하는지 확인하고, 문제가 있으면 플랫폼별로 나눈다). curl이 없으면 `fetch`의 `res.ok`.
+   - **2xx**면 상태 파일을 다시 읽어 `lastSent = body.rate_limits`, `lastSentAt = now`를 쓴다(`lastAttemptAt`은 그대로. `.tmp` 쓰고 rename).
+   - 그 밖(4xx·5xx·타임아웃·연결 거부·curl 종료 코드 ≠ 0)은 **아무것도 쓰지 않는다**. 되돌릴 기록이 없으므로 "되돌리기"가 필요 없다. 다음 실행이 60초 지난 뒤 같은 값을 다시 시도한다.
+4. 전송 자식이 중간에 죽어도(Claude Code가 프로세스 트리를 정리하는 경우 포함) 성공 기록이 없으므로 같은 방식으로 다시 시도된다.
+
+**상황별 동작**
+
+| 상황 | 이전 | 이후 |
+|---|---|---|
+| 서버가 꺼져 있음(연결 거부) | 값이 바뀔 때까지 반영 안 됨 | 다음 statusLine 실행(60초 뒤부터)에서 재시도, 서버가 켜지면 반영 |
+| `next dev` 첫 컴파일이 5초를 넘김 | 유실 | 재시도. 서버가 이미 받았어도 같은 값이라 D-27 병합은 멱등 |
+| 서버를 Claude Code보다 늦게 켬 | 사용률이 1% 오를 때까지 비어 있음 | 서버가 켜진 뒤 첫 실행(작업 중이면 보통 1분 안)에 반영 |
+| 401(토큰 틀림)·400 | 기록돼 조용히 사라짐 | 1분마다 시도가 반복됨(요청이 작음). `DEBUG` 로그에 상태 코드가 남아 원인을 알 수 있다 |
+| 서버 데이터가 없어졌는데 클라이언트는 이미 성공 기록이 있음(`.data` 백업·재설치, 2단계 DB 교체) | 값이 바뀔 때까지 반영 안 됨 | **변함없음**. 같은 값 재전송이 필요하며 2026-11-12 결정과 충돌하므로 결정 변경 필요(DC-1, 0.10절) |
+| Claude Code가 한가함(멈춤 규칙) | 실행 자체가 없음 | **변함없음**. 멈춤 규칙 때문에 한가한 동안에는 재시도도 없다. 다음 작업 때 재시도 |
+
+**진단용 로그(DEBUG=1일 때만)**: `tmpdir/dev-team-kit-observe/statusline-debug.log`에 JSON 한 줄씩 덧붙인다(0600, 256KB를 넘으면 비우고 다시 시작). 작업 폴더·transcript 경로는 넣지 않는다(기존 `statusline-stdin-*.log`는 원문이라 경로가 있어 붙여넣기 위험).
+- 실행마다(멈춤 판단 **전**): `{t, kind:"run", paused, rl:{five_hour:{p,r}, seven_day:{p,r}}}` — Claude Code가 이 스크립트를 부른 시각과 그때 stdin의 `rate_limits`.
+- 전송 판단: `{t, kind:"decision", send:true|false, reason:"first|changed|unchanged|interval|lock|no-windows|disabled|no-url"}`.
+- 전송 결과(자식): `{t, kind:"send", status:202|0, curlExit, ms}`.
+
+##### 0.6.2 LIVE-02: `/usage`보다 늦는 원인을 가리는 진단 절차
+
+가능성(보고서): ① `rate_limits`가 마지막 API 응답 때 갱신(Claude Code 한계) ② 상태 줄은 다시 그릴 때만 실행되고, 직전과 같은 stdin이면 우리 쪽에서 멈춤 ③ 값 변경 때만·PC당 1분 1회 ④ 전송 실패(LIVE-01) ⑤ 화면 폴링 3초(영향 작음).
+
+준비(지금 설치본 0.1.5로 시작 가능, 0.6.1 변경 뒤에는 더 쉬움)
+1. `.claude/settings.local.json`의 `env`에 `AGENT_OBSERVER_DEBUG=1`. 세션 재시작 없이 반영된다(보고서 확인).
+2. Windows PowerShell: `$d = "$env:TEMP\dev-team-kit-observe"`. 기존 로그: `Get-Content "$d\statusline-stdin-*.log" -Tail 3`(원문 JSON, `rate_limits` 포함). 전송 기록: `Get-Content "$d\plan-usage.json"`. 0.6.1 이후: `Get-Content "$d\statusline-debug.log" -Tail 20`.
+3. 서버 값: 화면의 플랜 사용량(마지막 측정 시각 포함) 또는 로그인한 브라우저에서 `/api/plan-usage`.
+
+측정(같은 시각에 모아 표로 기록, 3회 이상 반복)
+1. 메시지를 하나 보내 응답이 끝나게 한다(API 응답 발생). 끝난 시각을 적는다.
+2. 곧바로 Claude Code에서 `/usage`를 실행하고 값과 시각 `U`(5h, 7d)를 적는다.
+3. stdin 로그의 **마지막 줄들**에서 `rate_limits`와 줄 시각 `S`를 적는다.
+4. `plan-usage.json`의 `lastSent`·`lastSentAt`(`L`), 서버 화면의 값·마지막 측정(`V`)을 적는다.
+5. 한가한 3분 동안 stdin 로그 줄이 늘어나는지(스크립트가 불리는지), 값이 바뀌는지 본다.
+6. `/usage`만 실행하고(메시지 없이) 다음 상태 줄 갱신의 stdin 값이 `U`로 따라오는지 본다.
+
+판정
+
+| 관찰 | 결론 | 다음 |
+|---|---|---|
+| `S ≠ U`이고 한가할 때 로그 줄이 안 늘어남, 다음 응답이 와야 `S`가 `U`가 됨 | 원인 ①②(Claude Code 한계). 우리 쪽 문제 아님 | 수정 불가. 화면에 "응답 시점의 값이라 `/usage`와 다를 수 있음" 안내 추가(기획·디자인, 0.8절). 한가할 때도 `rate_limits`가 갱신되는지 확인되면 DC-2 |
+| `S ≠ U`인데 한가할 때도 로그 줄이 늘고 `rate_limits`가 바뀜(로그는 멈춤 판단 전에 쓰므로 멈춤 규칙과 무관) | Claude Code가 한가할 때도 값을 갱신하지만 `/usage`의 즉시 조회보다 주기만큼 늦음 | 갱신 주기를 재서 기록. 주기가 길면 Claude Code 한계. 이때 `refreshInterval`이 상태 줄 실행을 늘려 줄지 실험한 뒤 DC-2 결정 |
+| `S = U`인데 `L ≠ S` | 전송이 안 됐다 = ③④. 0.6.1 이후 로그의 `reason`·`status`로 구분: `interval`(60초 간격), `unchanged`, `status 0`(실패) | `interval`이면 60초 규칙 때문(최대 1분 지연, 결정 D-22). `status 0`이면 0.6.1이 해결 |
+| `L = S`인데 `V ≠ L` | 서버 쪽: D-27 병합(`resets_at` 60초 이내는 큰 값 유지), 수신 실패 | 서버 로그·`receivedAt` 확인 |
+| `V = U` | 지연 없음. 정수 반올림 차이(`used_percentage`가 소수일 수 있음)도 확인 | 종료 |
+
+지연 크기: `/usage`에서 값이 바뀐 시각(예: 3% → 4%)과 서버 `receivedAt`의 차이를 3회 재서 기록한다. 정상 범위는 "다음 상태 줄 갱신 + 최대 60초"다.
+
+##### 0.6.3 결정 변경이 필요한 부분 (임의로 확정하지 않음)
+
+2026-11-12 결정: D-23 10분 재전송 삭제, `refreshInterval` 미사용, 상태 줄은 작업 중일 때만 동작. 0.6.1은 이 결정을 **바꾸지 않는다**(이미 서버가 받은 값을 다시 보내지 않고, 받지 못한 값만 다시 시도). 아래는 바꿔야 할 수 있는 항목이며 사용자 결정이 필요하다(0.10절).
+
+| ID | 질문 | 선택지와 영향 |
+|---|---|---|
+| DC-1 | 값이 그대로여도 다시 보낼까(서버 데이터가 사라진 경우 복구) | (a) **유지**(재전송 없음): 서버 데이터가 사라지면 다음 값 변화 때까지 "정보 없음"/옛 값. 변경 없음. (b) 실행될 때 N분(예: 10분)마다 같은 값 재전송: 요청이 PC당 10분에 1번 늘고(작업 중일 때만, 멈춤 규칙은 유지), D-27 병합은 멱등이다. 서버 `receivedTs`가 "값이 바뀐 시각"에서 "마지막 확인 시각"이 되어 "마지막 측정 N분 전"의 의미가 바뀐다(작업 중에는 항상 최신). T1-8 수용 기준 "1분이 지나도 값이 같으면 전송되지 않는다"와 6.6 테스트 변경, D-23 번호는 재사용하지 않고 새 D 번호. (c) 서버에 값을 물어 보고 비면 보내기: 쿠키 전용 조회에 Bearer 예외(D-16 변경)나 새 Bearer GET이 필요하고 매 실행 요청이 늘어 비추천 |
+| DC-2 | `refreshInterval`을 쓸까 | 0.6.2 진단에서 "한가할 때도 stdin의 `rate_limits`가 바뀐다"가 확인될 때만 의미가 있다. 그렇지 않으면 다시 그려도 같은 옛 값이라 효과가 없다. (a) **미사용 유지**. (b) 사용(예: 60초): 세션마다 분당 Node 기동 1회(Windows에서 수십~백 ms 추정), 멈춤 규칙 덕에 stdin이 같으면 감싼 명령·전송은 없다. T1-8 수용 기준 "스크립트가 `refreshInterval` 설정을 추가하지 않는다"와 설치기(`mergeSettings`), 6.6 테스트 변경 |
+| DC-3 | 멈춤 규칙(한가할 때 실행·전송 없음) 유지 | 진단 결과 ②가 원인이면 재검토 대상. 멈춤을 풀면 한가할 때도 감싼 명령이 주기적으로 실행되므로 DC-2와 한 묶음. 진단 전에는 유지 |
+
+진단 결과별 권고(결정은 아님): 원인이 ①·②(Claude Code 한계)면 DC-1(a)·DC-2(a) 유지와 화면 안내가 가장 작다. 원인이 ④(전송 실패)면 0.6.1로 해결되고 DC는 불필요. 서버를 자주 껐다 켜거나 `.data`를 초기화하는 사용 방식이면 DC-1(b)를 고려.
+
+##### 0.6.4 사용자 영향 경계
+
+- 0.6.1은 kit 변경이라 이 저장소의 설치본은 kit 병합 후 설치기를 다시 실행해야 바뀐다. 그 전까지 LIVE-01은 재현된다. 임시 조치는 `%TEMP%\dev-team-kit-observe\plan-usage.json` 삭제(보고서 확인).
+- 서버 쪽 변경은 필요 없다(응답 코드는 이미 2xx/4xx 구분). `POST /api/plan-usage/report`의 202 계약은 그대로.
+
+##### 0.6.5 테스트 변경 (kit 병합 뒤 `tests/script/statusline.test.ts`, kit 저장소 테스트에도 같은 항목)
+
+- `decideSend`: 기존 단언 유지(v1 형태 상태도 통과). 추가: `{lastAttemptAt: now, lastSentAt: 오래전, lastSent: 이전 값}`에서 59초 뒤 false, 60초 뒤 changed면 true.
+- 전송 성공 기록: 테스트 `node:http` 수신기가 202를 주면 상태 파일에 `lastSent`·`lastSentAt`이 생긴다(폴링으로 확인).
+- 전송 실패(핵심 회귀): 수신기가 500을 주거나 닫힌 포트로 보내면 `lastSent`가 생기지 않고 `lastAttemptAt`만 있다. `lastAttemptAt`을 61초 전으로 고치고 같은 값으로 다시 실행하면 **다시 전송된다**. 수신기를 202로 바꾸면 그 뒤 같은 값 실행은 전송되지 않는다.
+- 1분 안 재시도 없음: 실패 직후 같은 값으로 바로 실행하면 전송되지 않는다(`reason: interval`).
+- 동시 실행 3개 → 시도 1회(기존 유지, 잠금).
+- DEBUG 로그: `statusline-debug.log`에 `run`·`decision`·`send` 줄이 생기고 작업 폴더·transcript 경로 문자열이 없다.
+- 기존 "같은 값 `lastSentAt` 24시간 전으로 고쳐도 안 보냄"은 유지(재전송 없음). DC-1(b)가 채택되면 이 줄과 T1-8 수용 기준이 바뀐다.
+
+#### 0.7 LIVE-05: 사무실 메인 화면이 데이터·API에 주는 영향 (결정은 하지 않음)
+
+결정 대기: `docs/team/design-options-live05.md`의 선택지 (가) 사무실 하나에 모든 세션(세션별 방), (나) 선택한 세션만(목록 얇게), (다) 혼합(세션 스트립 + 선택한 방). 이 절은 각 선택지가 서버에 요구하는 것만 적는다. 화면 구성·접근성은 designer·planner 몫.
+
+**사무실이 필요로 하는 데이터와 현재 API**
+
+| 데이터 | 현재 | 부족분 |
+|---|---|---|
+| 세션별 상태·승인 대기·정렬 | `GET /api/sessions`(전 세션) | 없음 |
+| BOT별 상태·현재 도구·승인 대기 시간 | `GET /api/sessions/[key]`(세션 하나씩) | **전 세션을 한 번에 줄 방법이 없다**(세션 N개 = 요청 N개) |
+| BOT별 스킬 | 상세 `agents[].skills` | 같은 이유 |
+| 모델(세션·BOT) | 세션 상세 `session.model`만 | LIVE-03(0.5절)으로 `agents[].model` 추가됨 |
+| 플랜 사용량 | `GET /api/plan-usage`(계정 단위, 별도) | 없음. 사무실에 합쳐 줄지는 후보 |
+| 세션별 BOT 상태 요약(스트립 타일) | 없음(`agentCount`, `waitingCount`만) | (다)는 상태별 개수가 필요할 수 있음 |
+| 끝난 BOT 제외(R14), 합치기 | 서버가 제외 규칙 적용(0.4절). 합치기는 화면 | 없음 |
+
+**조회 API 후보(전 세션 BOT 상태를 한 번에)**
+
+| 후보 | 모양 | 장점 | 단점 |
+|---|---|---|---|
+| (1) `GET /api/sessions?include=agents` **(기술적 권고, 선택지 (가)·(다)가 정해지면)** | 목록 항목마다 `agents`(경량 AgentView: `agentKey, role, displayName, characterId, status, currentTool, waitingSince, stale, lastEventAt, model, skills 상위 N + skillCount`)를 더한다. 종료 세션은 `agents` 비움 | 필터(`project`, `ended`, `hidden`)·정렬·`hiddenCount`·인증·R14를 그대로 재사용, 새 경로·proxy 규칙 없음 | 목록 응답이 커진다. `include` 없을 때는 지금과 같아 하위 호환 |
+| (2) `GET /api/office`(새 경로, 사무실 전용) | 세션+에이전트+(선택)플랜 사용량을 한 응답에 | 응답 모양을 화면에 맞게 자유롭게, 요청 1개 | 필터·정렬·숨김 규칙을 두 군데에서 유지, proxy 보호 목록·테스트 추가 |
+| (3) 지금 API + 클라이언트가 세션마다 상세 호출 | 변경 없음 | 서버 변경 0 | 3초마다 세션 수만큼 요청. 비추천 |
+
+**폴링 비용·응답 크기(개략 추정, 구현 때 실측)**: 경량 에이전트 한 개 약 300B(키·역할·상태·도구·ISO 시각 2개·모델), 세션 항목 약 350B. 스킬 상위 3개를 더하면 에이전트당 약 150B 증가.
+
+| 규모 | 응답 크기 | 요청 수(틱당) |
+|---|---|---|
+| 지금 규모(활성 세션 3, BOT 평균 3) | 약 4KB(스킬 포함 약 5.5KB) | (1)·(2): 목록 1 + 플랜 1(+프로젝트 1) = 2~3. 지금: 목록·플랜·프로젝트 + 상세 1 = 4 |
+| 큰 규모(활성 세션 20, BOT 평균 8) | 약 60KB(스킬 포함 약 85KB), `next start`의 gzip으로 약 10KB | 같음 |
+- 서버 계산: `listSessions`가 전체 스냅숏을 `structuredClone`하므로 비용은 세션 수에 비례한다(수백 개 이하는 밀리초 단위). 1단계 로컬에서는 문제 없고 2단계 DB에서는 "종료되지 않은 세션과 그 에이전트" 조회 한 번으로 나누는 편이 맞다.
+- 2단계(Vercel)에서는 요청 수가 함수 호출 수이므로 탭 하나가 3초 폴링에 하루 28,800회 × 틱당 요청 수다. 후보 (1)·(2)는 틱당 요청을 4에서 2~3으로 줄인다. 탭이 보이지 않을 때 멈추는 규칙은 그대로.
+- 스킬 이름: 응답에 상위 N개를 넣으면 호버·탭 즉시 표시, 넣지 않으면 열 때 `GET /api/sessions/[key]`를 불러야 한다(지연 수십 ms, 로컬). 크기와 반응성의 교환이며 designer 결정(툴팁에 스킬 이름이 필요한가)에 따른다.
+- 푸시(SSE·웹소켓)는 Vercel 서버리스·1단계 범위 밖. 하지 않는다.
+
+**선택지가 데이터·API에 주는 영향**
+
+| 결정 | 선택지 | 서버·API 영향 |
+|---|---|---|
+| 세션 범위 | (나) 선택한 세션만 | **API 변경 없음**(목록 + 상세). 모델은 0.5절로 충분. 다른 세션의 승인 대기는 목록·띠가 맡음 |
+| | (가) 모든 세션 방 | (1) `include=agents` 필요(또는 (2)). 응답 크기가 활성 세션 수에 비례. 오래된 idle 세션은 `ended=none`·숨김으로 줄임 |
+| | (다) 혼합(스트립 + 큰 방) | 스트립용 상태 요약이 필요: 목록 항목에 `agentStatusCounts`(상태별 개수, 약 60B) 추가로 충분하고, 큰 방은 지금의 상세 API를 재사용할 수 있다. 즉 **(다)는 (가)보다 응답이 작다**. (1)로 가면 스트립·방이 한 응답 |
+| 세션 상세 | 유지 | 변경 없음 |
+| | 접는 패널·말풍선·툴팁으로 대체 | 상세 화면이 사라져도 `GET /api/sessions/[key]`는 툴팁 내용(스킬, 호출한 BOT, 모델)에 계속 쓸 수 있어 삭제하지 않는다. 전 세션 툴팁이 필요하면 (1)의 스킬 상위 N 또는 지연 조회 |
+| 390px 배치 | 방 접힘·타일 격자·선택 방 | 데이터는 같다. 접힌 줄이 "승인 대기 1 · 작업 중 1" 같은 요약을 쓰면 `agentStatusCounts`가 필요. 세션 수를 제한("더 보기 N")하려면 `limit`과 전체 수(`totalActive`) 필드 |
+| 정리·숨기기 | 방 머리 `⋯`로 이동 | 기존 `POST /api/sessions/[key]/dismiss·restore` 그대로 |
+| 같은 역할 합치기 | ×N | 서버 변경 없음(0.4절). 전 세션 개요 응답에서 서버가 합치면 개별 상태가 사라지므로 화면 몫 |
+| 플랜 사용량 | 사무실 계기판으로 이동 | `GET /api/plan-usage` 그대로. 사무실 응답에 합쳐 요청 1개를 줄일 수는 있으나 캐시·장애가 묶이므로 별도 유지를 권고 |
+
+**결정 필요(0.10절)**: Q-1~Q-4, Q-6~Q-8(designer 문서 7절), 위 표의 API 후보 선택(결정 뒤 설계 BOT이 확정). 결정 전에는 서버에 아무것도 구현하지 않는다(0.3절은 LIVE-05 코드를 포함하지 않는다).
+
+#### 0.8 기획 수정 필요 (planner 몫, 이 설계는 기획 문구를 바꾸지 않았다)
+
+| # | 위치 | 필요한 변경 | LIVE |
+|---|---|---|---|
+| P-1 | T1-2 요구사항·전이표 R8·R9·R12·R13 | 0.4절 표대로. R12a·R14 추가. "R1~R13"을 "R1~R14"로 | 04 |
+| P-2 | T1-2 시나리오 S-05(끝 문구), S-08 | 0.4절. S-15~S-22 추가, 수용 기준 "S-01~S-14"·"R1~R13 각각 1개 이상" 갱신 | 03·04 |
+| P-3 | T1-2 결정 필요 표 | 신규 D-31(완료 BOT 표시 유예, 제안 60초), D-32(내부 에이전트는 만들지 않고 무시), D-33(모델 출처: `usage.model`, 모델 이름만 읽음) 제안. 같은 역할 합치기(D-34)는 사용자 결정 | 03·04 |
+| P-4 | T1-5 요구·수용 기준 | "세션 상세 BOT 목록"에 R14 반영, 수용 기준 "S-05 후 qa는 완료 상태로 목록에 남아 있다"를 "60초 동안"으로, "60초 뒤 목록·사무실에서 사라지고 스킬 기록은 남는다" 추가. "모델(SessionStart의 `model`)"을 "모델(usage에서 갱신, BOT별 포함. 없으면 알 수 없음)"로 | 03·04 |
+| P-5 | T1-1 요구사항·수용 기준, D-21 행, HANDOFF "데이터 수집" 63행 | "`usage`와 `subagent.usage`는 받되 저장하지 않는다"를 "`usage`는 형식 검사 없이 받고 `model` 이름만 읽으며 토큰 수는 저장하지 않는다. `subagent.usage`는 버린다"로. 수용 기준 "usage가 든 payload를 보내면 2xx, 토큰 수가 없다"는 유지하고 "`usage.model`이 세션·BOT 모델로 보인다"를 추가 | 03 |
+| P-6 | T1-8 (가) 전송 조건, 수용 기준, 가정 "알려진 한계" | "전송 성공(2xx)을 확인한 값만 '보낸 값'으로 본다. 실패하면 1분 뒤 같은 값을 다시 시도한다"를 요구에, 첫 전송 실패 뒤 재시도 수용 기준을 추가. 한계에 "`/usage`와 값이 다를 수 있다(Claude Code가 응답 때 갱신)"와 화면 안내 문구 | 01·02 |
+| P-7 | T1-8 결정 필요(D-22~D-24) | DC-1·DC-2 결과에 따라 신규 D 번호(D-23 번호는 재사용 금지) | 02 |
+| P-8 | T1-7 요구 | 내부 에이전트 무시, 유예 제외, 모델 갱신, statusLine 재시도 테스트 | 01·03·04 |
+| P-9 | `.claude/team/profile.md` "기타 규칙"(책임자) | "payload의 `usage`(토큰)는 받되 저장하지 않는다"를 "토큰은 저장하지 않고 모델 이름만 읽는다"로 | 03 |
+| P-10 | DESIGN.md·`design-spec-stage1.md`(designer) | BOT별 모델 표시 위치, 완료 BOT 사라짐 표시, 0.7절 결정에 따른 사무실 전면 개편 | 03·04·05 |
+| P-11 | `docs/00-status.md` 남은 이슈 표(책임자) | LIVE-01~05 처리 상태 갱신 | 전체 |
+
+#### 0.9 운영 문서 수정 필요 (devops·책임자, 이 설계는 운영 문서를 고치지 않았다)
+
+- `docs/operations.md` 2절 "시작과 정지": Windows에서 백그라운드 `pnpm dev`를 멈춰도 자식 `node.exe`(next dev)가 3000 포트를 잡고 남을 수 있다. 확인 `netstat -ano | findstr :3000`, 종료 `taskkill /PID <pid> /T /F`.
+- `docs/operations.md` 6절 "observe·statusLine 연결 확인": LIVE-02 진단 절차(0.6.2)의 로그 위치(`%TEMP%\dev-team-kit-observe\`), `AGENT_OBSERVER_DEBUG=1`, 임시 조치(`plan-usage.json` 삭제).
+- `docs/operations.md` 7절 "문제 해결": "서버를 늦게 켰더니 플랜 사용량이 비어 있다"(kit 수정 전까지 임시 조치, 수정 후에는 재시도), "BOT이 계속 늘어난다"(서버 수정 후 해결).
+
+#### 0.10 사용자 결정 필요
+
+| ID | 항목 | 선택지 | 기본 제안 | 영향 |
+|---|---|---|---|---|
+| Q-5 | 끝난(done) BOT이 목록·사무실에 남는 시간(D-31) | 0초 / **60초** / 5분 | 60초 | 설정 한 줄(`subagentDoneGraceMs`). 0이면 짧게 끝난 BOT은 안 보임 |
+| Q-6 | 같은 역할 BOT 합치기(D-34) | 합침 ×N / 승인 대기만 따로 / 합치지 않음 | designer: 합침 ×N. 서버는 어느 쪽이든 변경 없음 | 화면 규칙, 좌석 수, 개별 도구·모델 표시 방법 |
+| DC-1 | 값이 같아도 재전송(서버 데이터 소실 복구) | 유지 / 10분 / 서버에 물어보기 | 진단 전 유지 | 0.6.3. `receivedTs` 의미·T1-8 수용 기준·테스트 |
+| DC-2 | `refreshInterval` 사용 | 미사용 / 60초 | 진단 전 미사용 | 0.6.3. 설치기·수용 기준 |
+| DC-3 | 멈춤 규칙 유지 | 유지 / 완화 | 진단 전 유지 | DC-2와 한 묶음 |
+| Q-1~Q-4, Q-7~Q-11 | LIVE-05: 세션 수, 선택지 (가)(나)(다), 세션 상세 유지 여부, 정리 버튼 위치, 좌석 초과, 플랜 계기판 위치, 접근성, 12절 변경 허가, 완료 BOT 이름표 | designer 문서 7절 참조 | designer 추천: (다)를 (나)부터 | 0.7절 표: (나)는 API 변경 없음, (가)는 `include=agents` 필요, (다)는 `agentStatusCounts` 정도 |
+| LIVE-05 API | 전 세션 BOT 조회 방식 | `include=agents` / `/api/office` / 클라이언트 N+1 | `include=agents`(선택지가 정해진 뒤 확정) | 0.7절 |
+
+이미 설계로 결정한 것(되돌리려면 알려 주세요): 내부 에이전트는 만들지 않음, 모델은 `usage.model`, 전송 성공 확인 뒤 기록(재시도는 같은 값을 **받지 못했을 때만**).
+
+#### 0.11 dev-team-kit 변경 목록 (다른 세션에서 수정, 이 저장소 설치본은 고치지 않는다)
+
+| # | 대상 | 변경 | LIVE | 필수 |
+|---|---|---|---|---|
+| K-1 | `kit/team/observe/statusline.mjs` | 상태 파일 v2(`lastAttemptAt`), `claimSend`를 `claimAttempt`로(시도 시각만 기록), 전송 자식이 2xx일 때만 `lastSent`·`lastSentAt` 기록, v1 파일 호환 | 01 | 예 |
+| K-2 | 같은 파일 `send`·`fetchFallback` | HTTP 상태 반환(`-w %{http_code}`, `fetch`는 `res.ok`), 널 장치 플랫폼별(Windows `NUL` 확인). "observe.mjs의 send와 같게 유지" 주석을 "상태를 돌려주는 점만 다름"으로 | 01 | 예 |
+| K-3 | 같은 파일 DEBUG | `statusline-debug.log`(run·decision·send 줄, 256KB 제한, 0600, 경로 없음). 멈춤 판단 **전**에 run 줄을 쓴다 | 02 | 예 |
+| K-4 | `kit` 테스트 + README | 0.6.5 테스트. README에 "`/usage`와 다를 때" 진단 절차(0.6.2, Windows PowerShell 명령 포함)와 로그 위치, 실패 시 재시도 동작 | 01·02 | 예 |
+| K-5 | 버전 | 0.1.6 이상으로 올리고 변경 요약. 설치 사본은 설치기 재실행으로 갱신 | 01 | 예 |
+| K-6 | `kit/team/observe/observe.mjs` | **변경 필요 없음**(`usage.model`을 이미 보냄). 선택 사항: 내부 에이전트(`agent_type`이 없고 SubagentStart 없이 오는 SubagentStop)를 보내지 않기, 최상위 `model` 추가. 서버 규칙이 우선이라 이번 범위에서는 하지 않는다 | 03·04 | 아니오 |
+| K-7 | `kit/team/observe/statusline.mjs`, 설치기 `mergeSettings` | DC-1(b)(같은 값 N분 재전송)·DC-2(b)(`refreshInterval`)가 **채택될 때만** | 02 | 조건부 |
+| K-8 | 기존 보고 항목 SEC-04 | 토큰을 curl 인자로 넘김(`ps`에 보임). 이번 변경에 같이 고칠 수 있음(`-H @-` 등) | 기존 | 아니오 |
+
+#### 0.12 설계 결정(ADR)·리스크·의존성
+
+| # | 결정 | 고려한 대안 | 이유 |
+|---|---|---|---|
+| A17 | 처음 보는 `agent_id`는 활동 증거 이벤트일 때만 만들고 나머지는 이벤트 통째로 무시 | `agent_type` null을 내부로 보고 숨김 플래그, 만들고 DTO에서만 숨김, observe.mjs에서 거르기 | 0.4절. 저장 증가·DTO 필드 증가 없음, 내부 에이전트의 모양이 바뀌어도 안전 |
+| A18 | 끝난 BOT 제외는 조회 때 계산(R14), 저장·정리 없음 | 저장소에서 삭제(`prune`), 상태에 `hidden` 저장 | A3과 같은 이유(타이머 없음, `now` 주입 테스트). 스킬·호출 기록이 에이전트 키에 묶여 있어 삭제는 일관성 규칙이 늘어남 |
+| A19 | 같은 역할 합치기는 서버가 하지 않음 | 서버에서 역할 단위로 합쳐 DTO | 병렬 BOT의 개별 승인 대기·도구가 가려지면 안 됨. 화면 규칙으로 충분 |
+| A20 | 모델은 `usage.model`을 서버가 읽고 최상위 `model`도 같은 칸으로 받음. BOT별·모든 이벤트 | payload `model` 필드 추가(kit 변경)만, SessionStart만 유지 | 0.5절. 지금 설치본으로 해결, 충돌은 문서 수정으로 해소 |
+| A21 | 전송 시도(`lastAttemptAt`, 부모)와 성공(`lastSent`, 자식)을 분리 기록 | 부모가 전송 끝까지 기다려 기록, 실패 시 `lastSent` 되돌리기, 같은 값 주기 재전송 | 부모가 기다리면 출력이 늦어진다(A11). 되돌리기는 경쟁 상태가 생긴다. 주기 재전송은 2026-11-12 결정 변경이 필요해 분리(0.6.3) |
+| A22 | 무시한 이벤트는 저장소에도 남기지 않음(`null` 반환) | 이벤트 로그에는 남기고 스냅숏만 건드리지 않기 | 로그도 유령 세션 키를 만든다. 진단은 보내는 쪽 DEBUG와 응답 `ignored`로 한다 |
+
+| 리스크 | 영향 | 대응 |
+|---|---|---|
+| SubagentStop이 SubagentStart보다 먼저 도착(비동기 hook) | R12a로 무시된 뒤 Start가 도착하면 그 BOT이 `thinking`으로 남아 R11(10분)까지 보임 | observe.mjs가 SubagentStop을 1.5초 늦춰 보내므로 드묾. 허용. 관찰되면 짧은 꼬리표 저장 검토 |
+| 내부 에이전트가 도구 이벤트를 내기 시작하고 `agent_type`이 null | BOT으로 만들어지고 `defaultRoleResolver(null)`이 "책임자"로 표시 | 화이트리스트라 보이는 것이 맞다. `agentId`가 있는데 `agentType`이 null이면 표시 이름을 구분할지(designer·0.8 P-10)는 관찰 후 |
+| 유예 60초 중 승인 대기 BOT | 해당 없음(waiting은 빼지 않음) | 테스트 T-2 |
+| `usage.model`이 최신 모델을 못 따라옴 | `/model` 직후 응답 전까지, SessionStart 누락 세션은 첫 usage 이벤트 전까지 null·이전 모델 | 한계로 표시. 서버가 더 할 수 있는 것 없음 |
+| `<synthetic>` 같은 가짜 모델 값 | 모델 줄이 이상하게 표시 | `cleanModel`이 꺾쇠 값 무시. 실제 transcript로 확인(구현 때) |
+| `usage`가 객체 안에서 `__proto__` 키 등 | 프로토타입 오염(SEC-01) | `usage`를 통째로 쓰지 않고 `Object.hasOwn(usage, 'model')` + 문자열 검사만. `protoKeys` 회귀 테스트에 `usage: {"__proto__":…}` 추가 권고 |
+| `usage` 입력 처리 변경은 외부 입력 경로를 건드림 | 보안 | **새 의존성은 없지만 security 리뷰를 권고**(입력 정리, 무시 이벤트 응답 `ignored`가 정보 노출이 아닌지) |
+| Windows `curl.exe`의 `-o /dev/null`·`-w` 동작 | 상태 코드를 못 읽으면 항상 실패로 보여 1분마다 재전송 | 구현 때 Windows에서 확인(0.6.1 3번). 성공 못 읽는 경우 재전송이 1분 1회로 제한돼 있어 폭주하지 않는다 |
+| 서버가 꺼진 동안 실행마다 시도 | 연결 거부 curl이 분당 1회 | 60초 시도 간격 |
+| 전송 자식이 길게 걸림(5초) 동안 다음 시도 | 중복 시도 | `lastAttemptAt` 60초 제한 + 잠금이 막음 |
+| LIVE-05 결정 지연 | 사무실 개편 불가 | 0.3절은 LIVE-05와 독립. 결정 뒤 0.7절을 확정 |
+
+새 의존성: **없다**(서버는 기존 zod, kit은 Node 내장 모듈과 curl). 따라서 보안 단계가 필수는 아니지만, 위 입력 처리 변경 때문에 security 리뷰를 권한다.
 
 ### 1. 디렉터리와 모듈 경계
 
@@ -610,7 +982,7 @@ interface SessionState {
   key: string;                     // sessionKey(project, session_id) — 아래 참고 [S-14]
   sessionId: string; project: string; branch: string | null;
   remote: boolean; remoteSessionId: string | null;
-  model: string | null;            // SessionStart.model. 세션 상세 표시용(GET /api/sessions/[key]의 model)
+  model: string | null;            // SessionStart.model. 세션 상세 표시용(GET /api/sessions/[key]의 model) (2026-11-25 개정: lead의 최신 모델, usage.model로도 갱신, AgentState.model 추가 → 0.5절 우선)
   ended: boolean;                  // SessionEnd(R10) 받음. 이후 이벤트가 오면 false로 (S-12)
   dismissedAtTs: number | null;    // 사용자가 "정리"한 시각. 이후 이벤트가 오면 null로
   restoredAtTs: number | null;     // 사용자가 "다시 표시"한 시각(종료 세션 24시간 표시 기준에 포함)
@@ -643,13 +1015,14 @@ interface PlanReport {             // 검증된 수집 요청(plan/schema 결과
 - 버전: 저장 파일 최상위에 `schemaVersion: 2`(개정 전 구현은 1). 변환(마이그레이션)은 하지 않는다(T1-1, 사용자 결정 2026-11-12). 버전이 2가 아니거나 JSON이 깨졌으면 서버 로그에 남기고 파일을 `state.json.bak-<시각>`으로 옮긴 뒤 빈 상태로 시작한다(지금 구현 그대로).
 
 #### 상태 계산 규칙 (reducer)
+- (2026-11-12 이후 개정: R12는 "아무 이벤트나 생성"이 아니라 활동 증거 이벤트만 생성, 그 밖은 R12a 무시, R14 표시 규칙 추가 → **0.4절 우선**)
 - 대상 에이전트: `agent_id`가 null이면 lead, 아니면 그 ID(R12: 없으면 생성, R13: 세션 없으면 생성). SubagentStart/Stop은 observe.mjs가 subagent의 `agent_id`를 넣어 보낸다.
 - **순서(D-7) [D-7 민감]**: 재생(replay) 대신 에이전트별 `(lastEventTs, lastSeq)` 비교로 처리한다. 이벤트의 `(tsMs, seq)`가 에이전트의 마지막 값보다 작으면 **상태 전이는 하지 않고** 스킬·BOT 호출 기록과 `lastEventTs` 최대값 갱신만 한다. S-13(늦게 도착한 옛 PreToolUse)은 완료로 남는다. 늦게 온 이벤트가 끼어들어 중간 상태가 바뀌는 경우는 화면에 의미가 없어 무시한다. D-7을 "도착 순"으로 바꾸면 이 비교만 빼면 된다.
 - R10 SessionEnd: 모든 에이전트 `ended`, `session.ended = true`. 이후 같은 세션에 이벤트가 오면 `ended=false`로 되돌리고 그 이벤트 규칙을 적용한다.
 - R6, D-9: 상태는 그대로, `lastEventTs`만 갱신(시간 초과 기준도 늘어난다).
 - 멱등성: 같은 PreToolUse 두 번 → 작업 중 그대로. 스킬 횟수는 중복 전송이면 두 번 센다(이벤트 ID가 payload에 없어 구분 불가 — 리스크 절).
 - **시간 초과(R11, D-6) [D-6 민감]**: 저장하지 않고 조회 시 `effectiveStatus(agent, now)`로 계산한다. `now - lastEventTs`가 working/thinking 10분, done 30분을 넘으면 `ended`. 경계는 "초과"(정확히 10분은 아직 작업 중). **waiting은 시간 초과로 ended가 되지 않는다.** 대신 `now - waitingSinceTs`가 24시간을 넘으면 DTO에 `stale: true`("승인 대기 (응답 없음)")를 붙인다. 세션 상태는 `effectiveStatus`들 중 D-5 우선순위 최대값.
-- `usage`·`subagent.usage`는 검증 단계에서 버려지므로 reducer에 오지 않는다(D-21, 5절).
+- `usage`·`subagent.usage`는 검증 단계에서 버려지므로 reducer에 오지 않는다(D-21, 5절). (2026-11-25 개정: `usage.model` 문자열 하나는 검증 단계가 `event.model`로 옮겨 reducer가 모델을 갱신한다 → 0.5절 우선)
 - 부모 Agent 도구 결과의 `subagent` 필드는 검증 단계에서 버려지므로 reducer에 오지 않는다. 서브에이전트는 `agent_id`가 든 이벤트(SubagentStart/Stop, 서브에이전트 안의 도구 이벤트)로만 생긴다(R12, 사용자 결정 2026-11-12). 부모 PostToolUse(Agent)는 lead에 대한 일반 PostToolUse 규칙만 적용한다.
 - 스킬: `event=PreToolUse && tool=Skill && skill` 일 때 `skills[agentKey][skill].count++`. `tool in (Agent, Task) && subagent_type` 이면 `agentCalls` 증가.
 
@@ -722,6 +1095,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 - 필수: `v === 1`, `event` 10종, `ts` ISO 8601(`Date.parse` 가능 + 정규식 `^\d{4}-\d{2}-\d{2}T`), `session_id` 1~256자, `project` 0~256자 문자열.
   - `project`가 빈 문자열이면 `"(unknown)"`으로 저장한다(observe.mjs는 git 없으면 폴더 이름을 넣으므로 드묾).
 - 선택(null 허용): `agent_id`, `agent_type`, `branch`, `remote_session_id`, `tool`, `skill`, `subagent_type`, `command`, `notification_type`, `source`, `model`, `reason`: 문자열 ≤256자(D-2). `remote`: boolean.
+- (2026-11-25 개정: `usage`는 `unknown`으로 받아 `model` 문자열만 읽고 나머지는 버린다. 400은 여전히 없다 → 0.5절 우선. `subagent`는 그대로 스키마에 없다)
 - **`usage`와 `subagent`(그 안의 `usage` 포함)는 스키마에 넣지 않는다(D-21, 사용자 결정 2026-11-12).** strip 모드라 어떤 형식으로 와도 검사 없이 버려지고, 이 필드 때문에 400이 나지 않는다. 저장·로그·응답 어디에도 남지 않는다.
 - `command`는 observe.mjs가 UserPromptExpansion에 넣는 필드(슬래시 명령 이름, 120자로 잘림)다. 위 payload 예시에 없지만 허용 필드에 넣는다(사용자 결정 2026-11-11, 부작용 확인함). observe.mjs는 hook 입력의 `command_name`만 보내고 명령 인자(프롬프트 일부가 될 수 있음)는 보내지 않는다. 원본 이벤트에만 저장하고 상태 계산·합계에는 쓰지 않는다.
 - 그 외(`prompt`, `tool_input`, `tool_response`, `message` 등)는 모두 버린다. 저장·로그 어디에도 남기지 않는다(검증 실패 로그에도 값 대신 경로만).
@@ -776,7 +1150,7 @@ fileStore (D-3 = 로컬 파일) **[D-3 민감: 메모리를 고르면 이 항목
 ```
 - 응답 어디에도 `usage`, `cost`, `totals`, `pricing`이 없다(조회 API 공통).
 - `role`·`displayName`·`characterId`는 `RoleResolver`가 정한다. T1-6 전에는 lead만 "책임자", 나머지는 `agentType` 원문, `characterId` null.
-- 에이전트 정렬: lead 먼저, 나머지는 `firstSeenTs` 순. 종료된 에이전트도 목록에 남긴다(스킬 기록 유지). 에이전트 `skills`는 횟수 내림차순, 같으면 이름순.
+- 에이전트 정렬: lead 먼저, 나머지는 `firstSeenTs` 순. 종료된 에이전트도 목록에 남긴다(스킬 기록 유지). (2026-11-25 개정: 서브에이전트는 done·ended 후 60초가 지나면 목록에서 빠지고 `model`·`skillTotals`·`hiddenAgentCount`가 응답에 더해진다 → 0.4·0.5절 우선) 에이전트 `skills`는 횟수 내림차순, 같으면 이름순.
 
 #### POST /api/sessions/[key]/dismiss (쿠키)
 "정리" 버튼. 204, 없는 키는 404. 쿠키는 SameSite=Lax라 다른 사이트에서의 POST에는 실리지 않지만, `Origin` 헤더가 같은 호스트인지도 확인한다(로그인 API도 같은 검사).
@@ -872,6 +1246,7 @@ sequenceDiagram
      - `changed` = state가 없거나, `current`의 창 중 하나라도 `lastSent`에 없거나 `used_percentage`·`resets_at`이 다르면 true. (`current`에 없는 창은 비교하지 않는다. 창이 사라진 것은 Claude Code가 초기화 시각이 지나 뺀 것이라 변경으로 보지 않는다.)
      - 결과 = `changed`. 1분 안에 바뀐 값은 `lastSent`와 계속 다르므로 1분이 지난 뒤 첫 실행 때 보내진다(D-22). 값이 같으면 얼마가 지나도 보내지 않는다(재전송 없음, D-23 삭제).
    - 동시 실행 처리: 잠금 파일 `plan-usage.lock`을 `fs.openSync(…, 'wx')`로 만든다. 이미 있으면 그 파일 mtime이 10초 안이면 **이번 실행은 보내지 않는다**(다음 실행이 보냄), 10초보다 오래됐으면 지우고 한 번만 다시 시도. 잠금을 얻으면 상태 파일을 **다시 읽어** `decideSend`를 한 번 더 판단하고, 보낼 때는 상태 파일을 먼저 갱신(`.tmp`에 쓰고 rename)한 뒤 잠금을 지운다(finally).
+   - (2026-11-25 개정: 아래 문장은 LIVE-01의 원인이다. 시도 시각만 먼저 쓰고 `lastSent`는 전송 자식이 2xx를 받은 뒤에 쓴다 → **0.6.1절 우선**)
    - 상태 파일은 **보내기 전에** 갱신한다. 전송이 실패해도 재시도하지 않고 다음 조건(값 변경 + 1분)을 기다린다. 따라서 실패한 값은 다음에 `rate_limits` 값이 바뀔 때(작업 중 사용률이 1%라도 오르거나 창이 새로 시작될 때)까지 서버에 반영되지 않는다. 화면은 "마지막 측정 N분 전"으로 이를 드러낸다(15절 리스크).
 5. **전송**(분리된 자식 프로세스): 본문을 만든다.
    ```json
@@ -1060,7 +1435,7 @@ API(`tests/api/planUsage.test.ts`, memory·file 두 구현)
 
 플랜 사용량 수집(6절)
 1. Claude Code가 statusLine 명령 실행 → `statusline.mjs`가 세션 키로 직전 stdin 지문과 비교 → 같으면 저장한 출력을 내고 exit 0(멈춤: 감싼 명령·전송 없음) → 다르면 감쌀 명령을 2초 제한으로 돌리면서 전송 여부를 결정 → 보낼 때만 분리된 자식이 `POST /api/plan-usage/report` → 부모는 출력·세션 파일 저장 후 exit 0.
-2. 실패 시: 감싼 명령 실패·시간 초과 → 기본 한 줄(그 출력도 저장). 서버 무응답·거부 → 자식이 5초 뒤 조용히 끝남, 재시도 없음. 다음에 `rate_limits` 값이 바뀌고 1분이 지난 실행에서 다시 보냄. 세션 파일 읽기·쓰기 실패 → 재개로 처리(평소 동작). 잘못된 stdin → 안 보냄.
+2. 실패 시(2026-11-25 개정: 서버 무응답·거부는 성공 기록이 없어 다음 실행에서 재시도 → 0.6.1절 우선): 감싼 명령 실패·시간 초과 → 기본 한 줄(그 출력도 저장). 서버 무응답·거부 → 자식이 5초 뒤 조용히 끝남, 재시도 없음. 다음에 `rate_limits` 값이 바뀌고 1분이 지난 실행에서 다시 보냄. 세션 파일 읽기·쓰기 실패 → 재개로 처리(평소 동작). 잘못된 stdin → 안 보냄.
 3. route: 401 / 413 / 400 → 저장 안 함. 통과하면 `store.applyPlanUsage`(뮤텍스 안 D-27 병합) → 202.
 
 플랜 사용량 조회
@@ -1170,7 +1545,7 @@ statusline.mjs 상수(스크립트 안): 최소 전송 간격 60초(D-22), 감�
 | `.claude/settings.local.json`의 statusLine이 우선 | kit 스크립트가 실행되지 않아 플랜 사용량이 안 옴 | 설치기가 알림. local 파일은 고치지 않음 |
 | 감싼 명령 2초 제한 | 원래 2초 넘게 걸리던 statusLine은 기본 한 줄로 바뀜 | D-25 결정. README에 적음 |
 | 감싼 명령이 다시 statusline.mjs를 부름 | 무한 실행 | `AGENT_OBSERVER_STATUSLINE_INNER` 표시 + 명령 문자열 검사 |
-| 전송 실패 시 재시도 없음(재전송도 없음) | 실패한 값은 다음 `rate_limits` 변경 때까지 반영 안 됨. 서버가 꺼진 동안의 마지막 값이 한가해지기 직전 값이면 다음 작업 때까지 옛 값 | 허용(사용자 결정). 화면은 경고 없이 "마지막 측정 N분 전"으로 드러낸다 |
+| (2026-11-25 개정: 실패한 값은 1분 뒤 다시 시도, 이미 받은 값은 재전송 없음 → 0.6.1절 우선) 전송 실패 시 재시도 없음(재전송도 없음) | 실패한 값은 다음 `rate_limits` 변경 때까지 반영 안 됨. 서버가 꺼진 동안의 마지막 값이 한가해지기 직전 값이면 다음 작업 때까지 옛 값 | 허용(사용자 결정). 화면은 경고 없이 "마지막 측정 N분 전"으로 드러낸다 |
 | 한가할 때도 stdin이 바뀜(가정 틀림) | 멈춤이 덜 일어나 감싼 명령이 평소처럼 자주 실행됨. 전송은 값이 같으면 안 하므로 서버 부하 영향 없음 | 6.1 [구현 시 확인 필요] 절차로 확인, 바뀌는 필드만 지문에서 제외 |
 | 멈춤 중 감싼 명령이 보여 주던 시간 의존 값(시계, git 상태 등) | 한가한 동안 기존 statusLine이 갱신되지 않음 | 사용자 결정의 의도된 동작. kit README에 적는다 |
 | 세션 파일 누적(tmpdir) | 디스크에 작은 파일이 쌓임 | 24시간 지난 파일 정리(1시간에 한 번 검사). OS tmp 정리도 있음 |
