@@ -45,6 +45,22 @@ describe('auth/cookie', () => {
     expect(await verifySessionCookieValue(null, ENV, NOW)).toBe(false);
   });
 
+  it('서명 마지막 글자의 동치 변형(미사용 하위 2비트)은 항상 거절된다(#12)', async () => {
+    const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    // 서명이 서로 다른 200개: 만료 시각을 바꿔 가며 만든다
+    for (let i = 0; i < 200; i++) {
+      const v = (await createSessionCookieValue(ENV, NOW + i * 1000))!;
+      expect(await verifySessionCookieValue(v, ENV, NOW)).toBe(true);
+      const last = v.at(-1)!;
+      const base = ALPHA.indexOf(last) & ~3; // 상위 4비트가 같은 글자 4개의 시작
+      for (let k = 0; k < 4; k++) {
+        const alt = ALPHA[base + k];
+        if (alt === last) continue;
+        expect(await verifySessionCookieValue(v.slice(0, -1) + alt, ENV, NOW)).toBe(false);
+      }
+    }
+  });
+
   it('비밀번호를 바꾸면 기존 쿠키가 무효다(SECRET 없을 때)', async () => {
     const v = await createSessionCookieValue(ENV, NOW);
     expect(await verifySessionCookieValue(v, { OBSERVER_PASSWORD: 'other' }, NOW)).toBe(false);

@@ -78,6 +78,7 @@ export async function verifySessionCookieValue(
   if (!Number.isSafeInteger(exp) || exp * 1000 <= nowMs) return false;
   const sig = fromBase64Url(m[2]);
   if (!sig || sig.length !== 32) return false;
+  if (toBase64Url(sig) !== m[2]) return false; // 마지막 글자의 미사용 하위 비트 변형(비정규 인코딩) 거절
   const raw = await signingKeyBytes(env);
   if (!raw) return false;
   const key = await hmacKey(raw, ['verify']);
