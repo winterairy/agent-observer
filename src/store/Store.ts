@@ -4,7 +4,7 @@
  */
 import type { IncomingEvent, NormalizedEvent, PlanReport, PlanUsageState, SessionState } from '@/domain/types';
 
-export type Reducer = (s: SessionState | null, ev: NormalizedEvent) => SessionState;
+export type Reducer = (s: SessionState | null, ev: NormalizedEvent) => SessionState | null;
 
 /** 플랜 사용량 병합 순수 함수(plan/merge.ts의 mergePlanUsage) */
 export type PlanMerger = (prev: PlanUsageState, report: PlanReport, now: number) => PlanUsageState;
@@ -17,7 +17,8 @@ export interface SessionFilter {
 
 export interface Store {
   /** 원자적으로 세션 스냅숏을 갱신하고 이벤트를 보관한다. fn은 순수 reducer. */
-  applyEvent(ev: IncomingEvent, fn: Reducer): Promise<SessionState>;
+  /** reducer가 null(무시할 이벤트)을 돌려주면 아무것도 바꾸지 않고 null을 돌려준다 */
+  applyEvent(ev: IncomingEvent, fn: Reducer): Promise<SessionState | null>;
   getSession(key: string): Promise<SessionState | null>;
   listSessions(filter?: SessionFilter): Promise<SessionState[]>;
   listProjects(): Promise<string[]>;

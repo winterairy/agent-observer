@@ -92,18 +92,22 @@ export abstract class CoreStore implements Store {
     return this.mutex.run(fn);
   }
 
-  applyEvent(ev: IncomingEvent, fn: Reducer): Promise<SessionState> {
-    return this.write(() => {
+  async applyEvent(ev: IncomingEvent, fn: Reducer): Promise<SessionState | null> {
+    await this.ready();
+    return this.mutex.run(() => {
       const full: NormalizedEvent = { ...ev, seq: this.data.seq + 1 };
       const key = sessionKey(ev.project, ev.session_id);
       const prev = getOwn(this.data.sessions, key);
       // reducer가 실패하면 seq·상태를 바꾸지 않는다
       const next = fn(prev ? structuredClone(prev) : null, full);
+      // 무시할 이벤트: seq·이벤트·스냅숏·저장 예약 모두 건너뛴다
+      if (next === null) return null;
       this.data.seq = full.seq;
       setOwn(this.data.sessions, next.key, next);
       const list = getOwn(this.data.events, next.key) ?? [];
       list.push(full);
       setOwn(this.data.events, next.key, pruneEvents(list, this.clock(), this.limits));
+      this.changed();
       return structuredClone(next);
     });
   }

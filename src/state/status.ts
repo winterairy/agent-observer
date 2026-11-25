@@ -58,6 +58,17 @@ export function effectiveStatus(
 }
 
 /**
+ * R14: 서브에이전트(agentId 있음)가 done·ended가 된 지 graceMs를 넘으면 목록에서 뺀다(조회 때 계산, 저장은 그대로).
+ * lead와 승인 대기·작업 중·생각 중은 항상 보인다. 경계는 "초과"일 때만 제외.
+ */
+export function isListedAgent(agent: AgentState, now: number, graceMs: number = config.subagentDoneGraceMs): boolean {
+  if (agent.agentId === null) return true;
+  const { status } = effectiveStatus(agent, now);
+  if (status !== 'done' && status !== 'ended') return true;
+  return now - agent.lastEventTs <= graceMs;
+}
+
+/**
  * 세션 상태 = 에이전트 effective 상태 중 우선순위 최대값.
  * 승인 대기면 가장 오래 기다린 에이전트의 시작 시각과 그 기준 stale을 돌려준다.
  */

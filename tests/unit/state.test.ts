@@ -1,12 +1,15 @@
 /**
- * 상태 계산(T1-2). 시나리오 S-01~S-14(S-11b, S-11c 포함)와 전이표 R1~R13(R11a 포함).
+ * 상태 계산(T1-2). 시나리오 S-01~S-22(S-11b, S-11c 포함)와 전이표 R1~R14(R11a·R12a 포함). R14는 표시 규칙이라 agentVisibility.test.ts.
  * 시간 초과는 now를 바꿔 검증한다(실제로 기다리지 않는다).
  */
 import { describe, expect, it } from 'vitest';
-import { LEAD_KEY, sessionKey, type AgentState, type SessionState } from '@/domain/types';
-import { applyEvent } from '@/state/reducer';
+import { LEAD_KEY, sessionKey, type AgentState, type NormalizedEvent, type SessionState } from '@/domain/types';
+import { applyEvent as reduce } from '@/state/reducer';
 import { effectiveStatus, sessionStatus } from '@/state/status';
 import { HOUR, MIN, SEC, T0, ev, last, run } from '../helpers/events';
+
+/** 무시(R12a)되지 않는 이벤트용. 무시되면 null이라 이후 단언이 바로 실패한다 */
+const applyEvent = (prev: SessionState | null, e: NormalizedEvent): SessionState => reduce(prev, e)!;
 
 const A1 = 'A1';
 const lead = (s: SessionState): AgentState => s.agents[LEAD_KEY];
@@ -222,7 +225,84 @@ describe('시나리오 S-01~S-14', () => {
   });
 });
 
-describe('전이표 R1~R13', () => {
+describe('시나리오 S-15~S-22 (LIVE-03·04)', () => {
+  it('S-15 기존 세션에서 SubagentStop(X)만 도착 → X 없음, 세션 불변(lastEventTs 포함)', () => {
+    const s = applyEvent(null, ev('PreToolUse', { at: T0, tool: 'Read' }));
+    const before = structuredClone(s);
+    expect(reduce(s, ev('SubagentStop', { at: T0 + 30 * SEC, agent_id: 'X', agent_type: null }))).toBeNull();
+    expect(s).toEqual(before);
+  });
+
+  it('S-16 처음 보는 세션에 SubagentStop만 도착 → 세션 만들어지지 않음', () => {
+    expect(reduce(null, ev('SubagentStop', { agent_id: 'X' }))).toBeNull();
+  });
+
+  it('S-17 SubagentStart → SubagentStop: 저장 상태는 done, 스킬 합계 유지(목록 제외는 agentVisibility)', () => {
+    const s = last(
+      run([
+        ev('SubagentStart', { at: T0, ...sub }),
+        ev('PreToolUse', { at: T0 + SEC, ...sub, tool: 'Skill', skill: 'qa-check' }),
+        ev('SubagentStop', { at: T0 + 2 * SEC, ...sub }),
+      ]),
+    );
+    expect(a1(s).status).toBe('done');
+    expect(s.skills[A1]['qa-check'].count).toBe(1);
+  });
+
+  it('S-18 처음 보는 A1에 PostToolUse가 먼저 → A1 생성, 생각 중', () => {
+    const s = applyEvent(null, ev('PostToolUse', { ...sub, tool: 'Read' }));
+    expect(a1(s).status).toBe('thinking');
+  });
+
+  it('S-19 처음 보는 A1: idle_prompt는 생성 안 됨, permission_prompt는 승인 대기로 생성', () => {
+    const parent = applyEvent(null, ev('UserPromptSubmit'));
+    expect(reduce(parent, ev('Notification', { at: T0 + SEC, ...sub, notification_type: 'idle_prompt' }))).toBeNull();
+    const w = applyEvent(parent, ev('Notification', { at: T0 + SEC, ...sub, notification_type: 'permission_prompt' }));
+    expect(a1(w).status).toBe('waiting');
+  });
+
+  it('S-20 끝난 A1에 같은 agent_id로 PreToolUse → 다시 작업 중', () => {
+    const s = last(
+      run([
+        ev('SubagentStart', { at: T0, ...sub }),
+        ev('SubagentStop', { at: T0 + SEC, ...sub }),
+        ev('PreToolUse', { at: T0 + 2 * MIN, ...sub, tool: 'Read' }),
+      ]),
+    );
+    expect(a1(s).status).toBe('working');
+  });
+
+  it('S-21 서브에이전트 작업 중 SessionEnd → 세션·lead·A1 종료(저장)', () => {
+    const s = last(
+      run([
+        ev('UserPromptSubmit', { at: T0 }),
+        ev('PreToolUse', { at: T0 + SEC, ...sub, tool: 'Read' }),
+        ev('SessionEnd', { at: T0 + 2 * SEC }),
+      ]),
+    );
+    expect(s.ended).toBe(true);
+    expect(a1(s).status).toBe('ended');
+    expect(lead(s).status).toBe('ended');
+  });
+
+  it('S-22 모델: 모든 이벤트의 model이 lead·BOT 모델이 되고, 늦게 온 옛 이벤트는 덮지 않으며, 없는 이벤트는 유지', () => {
+    const s = last(
+      run([
+        ev('SessionStart', { at: T0, model: 'm-1' }),
+        ev('PreToolUse', { at: T0 + SEC, ...sub, tool: 'Read' }),
+        ev('PostToolUse', { at: T0 + 2 * SEC, ...sub, tool: 'Read', model: 'm-sub' }),
+        ev('PostToolUse', { at: T0 + 3 * SEC, tool: 'Read', model: 'm-2' }),
+        ev('UserPromptSubmit', { at: T0 + 4 * SEC }),
+        ev('PostToolUse', { at: T0 + 2 * SEC, tool: 'Read', model: 'm-old' }),
+      ]),
+    );
+    expect(s.model).toBe('m-2');
+    expect(lead(s).model).toBe('m-2');
+    expect(a1(s).model).toBe('m-sub');
+  });
+});
+
+describe('전이표 R1~R13(R12a 포함)', () => {
   it('R1 SessionStart(메인): 없음/모두 → 완료, model 기록', () => {
     const s = applyEvent(null, ev('SessionStart', { source: 'startup', model: 'claude-opus-5-5' }));
     expect(lead(s).status).toBe('done');
@@ -265,7 +345,7 @@ describe('전이표 R1~R13', () => {
     expect(lead(w2).waitingSinceTs).toBe(T0);
     const d = last(run([ev('Stop'), ev('Stop', { at: T0 + SEC })]));
     expect(lead(d).status).toBe('done');
-    const sd = last(run([ev('SubagentStop', sub), ev('SubagentStop', { ...sub, at: T0 + SEC })]));
+    const sd = last(run([ev('SubagentStart', sub), ev('SubagentStop', { ...sub, at: T0 + SEC }), ev('SubagentStop', { ...sub, at: T0 + 2 * SEC })]));
     expect(a1(sd).status).toBe('done');
   });
 
@@ -360,13 +440,30 @@ describe('전이표 R1~R13', () => {
     expect(lead(s).status).toBe('waiting');
   });
 
-  it('R12 처음 보는 agent_id의 아무 이벤트: 서브에이전트를 만들고 그 이벤트 규칙 적용', () => {
+  it('R12 처음 보는 agent_id: SubagentStart·PreToolUse·PostToolUse·permission_prompt만 만든다', () => {
     const parent = applyEvent(null, ev('UserPromptSubmit'));
     const n = applyEvent(parent, ev('Notification', { at: T0 + SEC, agent_id: 'A9', agent_type: 'security', notification_type: 'permission_prompt' }));
     expect(n.agents.A9.status).toBe('waiting');
     expect(n.agents.A9.agentType).toBe('security');
-    const st = applyEvent(parent, ev('SubagentStop', { at: T0 + SEC, agent_id: 'A8', agent_type: 'qa' }));
-    expect(st.agents.A8.status).toBe('done');
+    const made = (e: NormalizedEvent) => reduce(parent, e)?.agents.A7;
+    const at = T0 + SEC;
+    expect(made(ev('SubagentStart', { at, agent_id: 'A7' }))?.status).toBe('thinking');
+    expect(made(ev('PreToolUse', { at, agent_id: 'A7', tool: 'Read' }))?.status).toBe('working');
+    expect(made(ev('PostToolUse', { at, agent_id: 'A7', tool: 'Read' }))?.status).toBe('thinking');
+  });
+
+  it('R12a 처음 보는 agent_id의 SubagentStop·idle_prompt 등은 null(통째로 무시), 입력 세션 불변', () => {
+    const parent = applyEvent(null, ev('UserPromptSubmit'));
+    const snapshot = structuredClone(parent);
+    const at = T0 + 5 * SEC;
+    expect(reduce(parent, ev('SubagentStop', { at, agent_id: 'A8', agent_type: 'qa' }))).toBeNull();
+    expect(reduce(parent, ev('Notification', { at, agent_id: 'A8', notification_type: 'idle_prompt' }))).toBeNull();
+    expect(reduce(parent, ev('Stop', { at, agent_id: 'A8' }))).toBeNull();
+    expect(parent).toEqual(snapshot);
+  });
+
+  it('R13 R12a로 무시되는 이벤트는 세션을 만들지 않는다', () => {
+    expect(reduce(null, ev('SubagentStop', { session_id: 'S9', agent_id: 'A8' }))).toBeNull();
   });
 
   it('R13 처음 보는 session_id의 아무 이벤트: 세션을 만들고 그 이벤트 규칙 적용', () => {

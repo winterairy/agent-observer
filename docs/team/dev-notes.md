@@ -258,3 +258,33 @@ R-16: 1차 '단가 확인 결과'·'설계와 달라진 점 1, 2, 6'과 Haiku �
 - 책임자 결정(T1-5 "없음 상태도 보인다")에 따라 `PlanUsageMini`가 두 창 모두 none이어도 그린다. 응답 전(`plan === null`)만 숨긴다. 표시 문자는 한 창 없음과 같은 `–`(기존 표기 유지).
 - DESIGN.md의 "두 창 모두 none이면 띠를 그리지 않는다" 문장은 책임자가 고친다(코드·테스트만 바꿈).
 - 테스트: `e2e/plan-usage-screen.spec.ts` 1번을 "계기판 보이고 두 창 data-status=none, `–`, 0% 없음"으로 바꿨다.
+
+## 2026-11-25 LIVE-04·LIVE-03 서버 수정 (이슈 #8)
+
+설계: HANDOFF 0절(C-1~C-10, T-1~T-9). 사용자 결정: 끝난 BOT 유예 60초, 모델 이름 저장 허용(토큰 수는 계속 저장 안 함), 같은 역할 BOT은 서버·화면 모두 합치지 않음.
+
+### 구현
+- C-1 `src/config.ts`: `subagentDoneGraceMs: 60_000`.
+- C-2 `src/domain/types.ts`: `AgentState.model`(선택 필드, schemaVersion 2 그대로, 읽을 때 `?? null`). 모델 주석 갱신.
+- C-3 `src/collect/schema.ts`: `usage: z.unknown().optional()`, `cleanModel`(trim·1~256자·꺾쇠 값 null), `usageModel`(`Object.hasOwn`으로 자기 속성 `model`만). 최상위 `model` 우선. usage 객체는 이벤트에 넣지 않는다. `model`은 `OPTIONAL_STRING_KEYS`에서 빼고 한 곳에서 정리한다.
+- C-4 `src/state/reducer.ts`: 반환형 `SessionState | null`. R12a는 함수 맨 앞에서 null(처음 보는 `agent_id`가 SubagentStart·PreToolUse·PostToolUse·permission_prompt가 아닐 때). PostToolUse로 새로 만들면 `thinking`. `!stale`이면 `ev.model`을 에이전트·lead 세션 모델에 반영(모든 이벤트).
+- C-5 `src/store/Store.ts`·`core.ts`: reducer가 null이면 seq·이벤트·스냅숏·저장 예약을 모두 건너뛰고 null.
+- C-6 `ingest.ts`·`app/api/events/route.ts`: null이면 202 `{"ok":true,"session":null,"ignored":true}`.
+- C-7 `src/state/status.ts`: `isListedAgent`.
+- C-8 `src/query/views.ts`: 상세 agents 필터, `AgentView.model`, `skillTotals`, `hiddenAgentCount`, `agentCount`는 listed 수. `sessionStatus`·`waitingCount`는 전체 기준 그대로.
+- C-9 `src/ui/types.ts`: `views.ts` 재내보내기라 변경 없음. 화면 컴포넌트는 고치지 않았다.
+- C-10 `README.md` 한 줄씩.
+
+### 테스트
+T-1 state(R12·R12a·R13, S-15~S-22), T-2 `tests/unit/agentVisibility.test.ts`(+ model 필드 없는 옛 `.data` 유령 BOT이 R14로 사라지는지), T-3 store(memory·file), T-4 events(ignored, usage.model, 형식 오류 202, `<synthetic>`, 최상위 우선, subagent.usage 무시), T-5 query(유예 경계 60.000/60.001초, skillTotals, hiddenAgentCount, 모델), T-6 protoKeys에 `usage` 위험 키 케이스 추가(수정 필요했음), T-7 `e2e/office-agents.spec.ts`(과거 ts로 유예 제외, ghost 무시). T-8 기존 E2E 영향 없음 확인. T-9는 kit 머지 뒤라 하지 않음.
+기존 테스트 수정: reducer·`Store.applyEvent`가 null을 돌려주도록 타입이 바뀌어 `tests/helpers/events.ts`(`run`이 null이면 throw), `state.test.ts`(null 아닌 래퍼), `store.test.ts`·`query.test.ts`(`!`)를 맞췄다. 멱등성 테스트의 SubagentStop은 SubagentStart 뒤에 보내도록 고쳤다.
+
+### 설계와 달라진 점
+- protoKeys T-6은 "수정 없음 예상"이었으나 `usage` 케이스 추가(요청 범위)로 수정했다. 같은 세션에 모델을 보내므로 다른 세션 추가는 하지 않았다.
+- `AgentState.model`을 타입에서 선택 필드(`model?:`)로 뒀다(저장 파일에 없을 수 있어서). 설계의 `string | null`과 읽는 쪽 결과는 같다.
+- 같은 이벤트가 SessionEnd여도 `!stale`이면 모델을 반영한다(모든 이벤트 규칙).
+
+### 알려진 제한
+- 화면은 아직 `model`·`skillTotals`·`hiddenAgentCount`를 쓰지 않는다(LIVE-05 결정 대기).
+- 실제 transcript의 `<synthetic>` 값 확인은 하지 않았다(실제 데이터 없음, 테스트 값으로만 확인).
+- 이전부터 있던 불안정 가능성: `tests/api/auth.test.ts` "쿠키 값을 임의로 바꾸면" 가 한 번 실패했다(마지막 글자 교체가 base64 동치일 때, 이번 변경과 무관, 재실행에서 통과).

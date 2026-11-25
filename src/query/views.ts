@@ -4,12 +4,15 @@
  * - 토큰·API 환산 비용(usage·cost·totals·pricing)은 응답에 넣지 않는다(2026-11-11 사용자 범위 변경:
  *   1단계에서 토큰·비용 기능을 빼고 플랜 사용량으로 바꿨다).
  * - 역할 매핑: ctx.roles. 기본은 null → lead, 그 외 원문(characters/roles.ts는 T1-6에서 넘긴다).
+ * - R14: 서브에이전트가 done·ended가 되고 유예(config.subagentDoneGraceMs)가 지나면 상세·agentCount에서 뺀다.
+ *   저장·스킬·BOT 호출 기록은 그대로라 상세는 skillTotals(세션 합계)를 함께 준다.
+ * - 모델: lead는 model ?? 세션 model, BOT은 AgentState.model. 토큰 수는 응답에 없다.
  * 응답에 토큰·비밀번호·쿠키 비밀값, 내부 경로를 넣지 않는다.
  */
 import { config } from '@/config';
 import { calledAgents, skillSummary } from '@/aggregate/totals';
 import { LEAD_KEY, type AgentStatus, type SessionState } from '@/domain/types';
-import { effectiveStatus, sessionStatus } from '@/state/status';
+import { effectiveStatus, isListedAgent, sessionStatus } from '@/state/status';
 import { getOwn } from '@/domain/dict';
 
 export interface RoleInfo {
@@ -81,7 +84,7 @@ function listRow(s: SessionState, ctx: ViewContext): ListRow {
       stale: st.status === 'waiting' && st.stale,
       lastEventAt: new Date(s.lastEventTs).toISOString(),
       dismissedAt: iso(s.dismissedAtTs),
-      agentCount: Object.keys(s.agents).length,
+      agentCount: Object.values(s.agents).filter((a) => isListedAgent(a, ctx.now)).length,
       waitingCount: st.waitingCount,
     },
   };
@@ -170,6 +173,7 @@ export interface AgentView {
   currentTool: string | null;
   waitingSince: string | null;
   stale: boolean;
+  model: string | null;
   lastEventAt: string;
   skills: { skill: string; count: number; lastAt: string }[];
   calledAgents: { subagentType: string; count: number }[];
@@ -179,11 +183,16 @@ export interface SessionDetailView {
   now: string;
   session: SessionListItem & { model: string | null; endedByEvent: boolean };
   agents: AgentView[];
+  /** 이 세션의 스킬 합계(R14로 빠진 BOT 포함) */
+  skillTotals: SkillsView['skills'];
+  /** R14로 목록에서 뺀 BOT 수 */
+  hiddenAgentCount: number;
 }
 
 export function sessionDetailView(s: SessionState, ctx: ViewContext): SessionDetailView {
   const roles = resolver(ctx);
-  const entries = Object.entries(s.agents).sort(([ka, a], [kb, b]) => {
+  const all = Object.entries(s.agents);
+  const entries = all.filter(([, a]) => isListedAgent(a, ctx.now)).sort(([ka, a], [kb, b]) => {
     if (ka === LEAD_KEY) return -1;
     if (kb === LEAD_KEY) return 1;
     return a.firstSeenTs - b.firstSeenTs || ka.localeCompare(kb);
@@ -202,6 +211,7 @@ export function sessionDetailView(s: SessionState, ctx: ViewContext): SessionDet
       currentTool: e.status === 'working' ? a.currentTool : null,
       waitingSince: e.status === 'waiting' ? iso(e.waitingSinceTs) : null,
       stale: e.stale,
+      model: (agentKey === LEAD_KEY ? (a.model ?? s.model) : a.model) ?? null,
       lastEventAt: new Date(a.lastEventTs).toISOString(),
       skills: Object.entries(getOwn(s.skills, agentKey) ?? {})
         .map(([skill, r]) => ({ skill, count: r.count, lastAt: new Date(r.lastTs).toISOString() }))
@@ -211,8 +221,10 @@ export function sessionDetailView(s: SessionState, ctx: ViewContext): SessionDet
   });
   return {
     now: new Date(ctx.now).toISOString(),
-    session: { ...sessionListItem(s, ctx), model: s.model, endedByEvent: s.ended },
+    session: { ...sessionListItem(s, ctx), model: s.model ?? null, endedByEvent: s.ended },
     agents,
+    skillTotals: skillsView([s], {}, ctx).skills,
+    hiddenAgentCount: all.length - entries.length,
   };
 }
 

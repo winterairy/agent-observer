@@ -8,7 +8,8 @@ import { applyEvent } from '@/state/reducer';
 import type { Store } from '@/store/Store';
 
 export type IngestResult =
-  | { ok: true; session: SessionState }
+  /** session null = R12a로 무시한 이벤트 */
+  | { ok: true; session: SessionState | null }
   | { ok: false; issues: string[] };
 
 export async function ingest(store: Store, raw: unknown, now: number): Promise<IngestResult> {
