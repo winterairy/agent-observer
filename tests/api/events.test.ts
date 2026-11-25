@@ -356,6 +356,68 @@ describe.each(kinds)('POST /api/events ($name)', (kind) => {
     }
   });
 
+  it('새 세션에 SubagentStop(agent_type null)만 보내면 202 ignored이고 세션이 없다(R12a)', async () => {
+    const res = await post(payload({ event: 'SubagentStop', tool: undefined, agent_id: 'X', agent_type: null }));
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, session: null, ignored: true });
+    expect(await sessionCount()).toBe(0);
+  });
+
+  it('기존 세션에 SubagentStop(X)을 보내면 ignored이고 에이전트 수·lastEventTs가 불변', async () => {
+    await post(payload({ ts: '2026-11-25T10:00:00.000Z' }));
+    const key = sessionKey('P1', 'sess-1');
+    const before = await getStore().getSession(key);
+    const res = await post(payload({ event: 'SubagentStop', tool: undefined, agent_id: 'X', ts: '2026-11-25T10:00:30.000Z' }));
+    expect(res.status).toBe(202);
+    expect((await res.json()).ignored).toBe(true);
+    expect(await getStore().getSession(key)).toEqual(before);
+    expect((await getStore().recentEvents(key, 10)).length).toBe(1);
+  });
+
+  it('usage.model이 세션·BOT 모델이 되고 토큰 수·usage는 저장·응답되지 않는다', async () => {
+    const usage = { input: 111111, output: 222222, cache_creation: 333333, cache_read: 444444, model: 'claude-opus-5-5', messages: 7 };
+    const res = await post(payload({ usage }));
+    expect(res.status).toBe(202);
+    const sub = await post(payload({ ts: new Date(Date.now() + 1).toISOString(), agent_id: 'a-1', agent_type: 'qa', usage: { ...usage, model: 'claude-haiku-5-5' } }));
+    expect(sub.status).toBe(202);
+    const s = await getStore().getSession(sessionKey('P1', 'sess-1'));
+    expect(s!.model).toBe('claude-opus-5-5');
+    expect(s!.agents.__lead__.model).toBe('claude-opus-5-5');
+    expect(s!.agents['a-1'].model).toBe('claude-haiku-5-5');
+    const text = await storedText();
+    for (const k of ['"usage"', '"cache_read"', '"cache_creation"', '"messages"', '111111', '222222', '333333', '444444']) {
+      expect(text).not.toContain(k);
+    }
+    expect(JSON.stringify(await res.clone().json())).not.toContain('claude');
+  });
+
+  it.each([
+    ['문자열', { usage: 'x' }],
+    ['배열', { usage: [1, 2] }],
+    ['model이 숫자', { usage: { model: 5 } }],
+    ['model이 300자', { usage: { model: 'm'.repeat(300) } }],
+    ['model이 <synthetic>', { usage: { model: '<synthetic>' } }],
+    ['최상위 model이 <synthetic>', { model: '<synthetic>' }],
+  ])('usage가 %s여도 202이고 모델은 갱신되지 않는다', async (_n, over) => {
+    const res = await post(payload(over));
+    expect(res.status).toBe(202);
+    const s = await getStore().getSession(sessionKey('P1', 'sess-1'));
+    expect(s!.model).toBeNull();
+  });
+
+  it('최상위 model과 usage.model이 둘 다 있으면 최상위가 우선', async () => {
+    await post(payload({ model: 'top-model', usage: { model: 'usage-model' } }));
+    const s = await getStore().getSession(sessionKey('P1', 'sess-1'));
+    expect(s!.model).toBe('top-model');
+  });
+
+  it('subagent.usage.model은 모델이 되지 않는다', async () => {
+    await post(payload({ event: 'PostToolUse', tool: 'Agent', subagent: { usage: { model: 'sub-model' } } }));
+    const s = await getStore().getSession(sessionKey('P1', 'sess-1'));
+    expect(s!.model).toBeNull();
+    expect(await storedText()).not.toContain('sub-model');
+  });
+
   it('command 필드(UserPromptExpansion)는 원본 이벤트에 저장된다', async () => {
     await post(payload({ event: 'UserPromptExpansion', tool: undefined, command: 'task' }));
     const [e] = await getStore().recentEvents(sessionKey('P1', 'sess-1'), 1);

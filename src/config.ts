@@ -20,6 +20,8 @@ export const config = {
   activeTimeoutMs: 10 * MINUTE,
   /** D-6 완료 시간 초과 */
   doneTimeoutMs: 30 * MINUTE,
+  /** R14 서브에이전트가 done·ended가 된 뒤 목록에 남기는 유예(사용자 결정 2026-11-25: 60초) */
+  subagentDoneGraceMs: 60 * 1000,
   /** 승인 대기 "응답 없음" 표시 기준 */
   waitingStaleMs: 24 * HOUR,
   /** 미래 ts 허용 범위. 넘으면 서버 시각으로 바꾼다 */

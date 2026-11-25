@@ -23,6 +23,7 @@ export async function POST(req: Request): Promise<Response> {
       console.warn(`[events] 검증 실패: ${result.issues.join(', ')}`);
       return json(400, { error: 'invalid_payload', message: 'payload 형식이 맞지 않습니다', issues: result.issues });
     }
+    if (result.session === null) return json(202, { ok: true, session: null, ignored: true });
     return json(202, { ok: true, session: result.session.key });
   } catch (e) {
     console.error('[events] 저장 실패', e instanceof Error ? e.name : 'unknown');

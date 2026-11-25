@@ -39,6 +39,7 @@ export interface NormalizedEvent {
   command?: string | null;
   notification_type?: string | null;
   source?: string | null;
+  /** 모든 이벤트. `usage.model` 또는 최상위 `model`을 합친 값(토큰 수는 저장하지 않음) */
   model?: string | null;
   reason?: string | null;
 }
@@ -67,6 +68,8 @@ export interface AgentState {
   lastEventTs: number;
   lastSeq: number;
   firstSeenTs: number;
+  /** 이 에이전트의 최신 모델 이름. 저장 파일에 없으면 읽을 때 null로 본다 */
+  model?: string | null;
 }
 
 export interface SkillCount {
@@ -82,7 +85,7 @@ export interface SessionState {
   branch: string | null;
   remote: boolean;
   remoteSessionId: string | null;
-  /** SessionStart.model */
+  /** lead의 최신 모델 */
   model: string | null;
   /** SessionEnd(R10) 받음. 이후 이벤트가 오면 false */
   ended: boolean;

@@ -87,6 +87,15 @@ describe.each(kinds)('SEC-01 프로토타입 키 ($name)', (kind) => {
     expect((await sendEvent({ agent_id: bad, tool: 'Agent', subagent_type: bad })).status).toBe(202);
     // session_id·project 자체
     expect((await sendEvent({ session_id: bad, project: bad, agent_id: bad, tool: bad })).status).toBe(202);
+    // usage 객체 안의 위험 키(LIVE-03): model만 읽고 나머지는 건드리지 않는다
+    const evil = JSON.parse(`{"__proto__":{"polluted":"yes"},"constructor":{"prototype":{"polluted":"yes"}},"model":"m-1"}`);
+    expect((await sendEvent({ usage: evil })).status).toBe(202);
+    expect((await getStore().getSession(sessionKey('P', 's1')))!.model).toBe('m-1');
+    // 상속된 model은 읽지 않는다
+    expect((await sendEvent({ usage: JSON.parse(`{"__proto__":{"model":"inherited"}}`) })).status).toBe(202);
+    expect((await getStore().getSession(sessionKey('P', 's1')))!.model).toBe('m-1');
+    expect((await sendEvent({ usage: { model: bad } })).status).toBe(202);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expectNoPollution();
 
     const cookie = await login();

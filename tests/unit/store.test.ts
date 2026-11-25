@@ -39,7 +39,7 @@ const factories: { name: string; make: (opts?: CoreStoreOptions) => Promise<Stor
 describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
   it('applyEvent가 seq를 도착 순으로 부여하고 세션 스냅숏을 돌려준다', async () => {
     const store = await make();
-    const a = await store.applyEvent(inc('SessionStart'), applyEvent);
+    const a = (await store.applyEvent(inc('SessionStart'), applyEvent))!;
     await store.applyEvent(inc('PreToolUse', { tool: 'Read' }), applyEvent);
     const events = await store.recentEvents(a.key, 10);
     expect(events.map((e) => e.seq)).toEqual([1, 2]);
@@ -49,7 +49,7 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
 
   it('돌려준 객체를 바꿔도 저장소 상태는 바뀌지 않는다', async () => {
     const store = await make();
-    const s = await store.applyEvent(inc('SessionStart'), applyEvent);
+    const s = (await store.applyEvent(inc('SessionStart'), applyEvent))!;
     s.project = 'changed';
     expect((await store.getSession(s.key))?.project).toBe('P1');
   });
@@ -62,8 +62,23 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
       }),
     ).rejects.toThrow();
     expect(await store.listSessions()).toEqual([]);
-    const s = await store.applyEvent(inc('SessionStart'), applyEvent);
+    const s = (await store.applyEvent(inc('SessionStart'), applyEvent))!;
     expect((await store.recentEvents(s.key, 10))[0].seq).toBe(1);
+  });
+
+  it('reducer가 null을 돌려주면 seq·이벤트·스냅숏이 그대로이고 null을 돌려준다(R12a)', async () => {
+    const store = await make();
+    const s = (await store.applyEvent(inc('SessionStart'), applyEvent))!;
+    const before = await store.getSession(s.key);
+    const r = await store.applyEvent(inc('SubagentStop', { at: T0 + 1000, agent_id: 'X' }), applyEvent);
+    expect(r).toBeNull();
+    expect(await store.getSession(s.key)).toEqual(before);
+    expect((await store.recentEvents(s.key, 10)).map((e) => e.seq)).toEqual([1]);
+    expect(await store.applyEvent(inc('SubagentStop', { session_id: 'NEW', agent_id: 'X' }), applyEvent)).toBeNull();
+    expect((await store.listSessions()).length).toBe(1);
+    // 무시한 이벤트가 seq를 쓰지 않는다
+    const n = (await store.applyEvent(inc('PreToolUse', { at: T0 + 2000, tool: 'Read' }), applyEvent))!;
+    expect((await store.recentEvents(n.key, 10)).map((e) => e.seq)).toEqual([1, 2]);
   });
 
   it('동시에 들어온 이벤트도 직렬로 처리된다', async () => {
@@ -91,7 +106,7 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
 
   it('dismiss·restore: 정리 시각·다시 표시 시각을 기록하고 새 이벤트가 오면 정리가 풀린다', async () => {
     const store = await make();
-    const s = await store.applyEvent(inc('SessionStart'), applyEvent);
+    const s = (await store.applyEvent(inc('SessionStart'), applyEvent))!;
     await store.dismiss(s.key, T0 + 5);
     expect((await store.getSession(s.key))?.dismissedAtTs).toBe(T0 + 5);
     await store.restore(s.key, T0 + 9);
@@ -128,7 +143,7 @@ describe.each(factories)('Store 공통 동작 ($name)', ({ make }) => {
 
   it('prune: 7일 지난 이벤트를 지우고 스냅숏은 남긴다', async () => {
     const store = await make({ clock: () => T0 });
-    const s = await store.applyEvent(inc('SessionStart', { at: T0 }), applyEvent);
+    const s = (await store.applyEvent(inc('SessionStart', { at: T0 }), applyEvent))!;
     await store.applyEvent(inc('Stop', { at: T0 + 6 * DAY_MS }), applyEvent);
     await store.prune(T0 + 7 * DAY_MS + 1);
     expect((await store.recentEvents(s.key, 10)).map((e) => e.event)).toEqual(['Stop']);

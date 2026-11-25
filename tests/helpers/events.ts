@@ -38,6 +38,7 @@ export function run(events: NormalizedEvent[], start: SessionState | null = null
   let s = start;
   for (const e of events) {
     s = applyEvent(s, e);
+    if (s === null) throw new Error('reducer가 이벤트를 무시했다(R12a)');
     out.push(s);
   }
   return out;

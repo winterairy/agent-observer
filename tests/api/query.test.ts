@@ -49,7 +49,7 @@ function at(ms: number): void {
 }
 
 async function send(event: EventName, over: Partial<NormalizedEvent> & { at?: number } = {}): Promise<string> {
-  const s = await getStore().applyEvent(inc(event, { at: now, ...over }), applyEvent);
+  const s = (await getStore().applyEvent(inc(event, { at: now, ...over }), applyEvent))!;
   return s.key;
 }
 
@@ -132,7 +132,7 @@ describe.each(kinds)('조회 API ($name)', (kind) => {
       ['PreToolUse', { tool: 'Agent', subagent_type: 'qa' }],
       ['SubagentStart', { agent_id: A1, agent_type: 'qa' }],
       ['PreToolUse', { agent_id: A1, agent_type: 'qa', tool: 'Skill', skill: 'playwright-cli' }],
-      ['PostToolUse', { agent_id: A1, agent_type: 'qa', tool: 'Skill' }],
+      ['PostToolUse', { agent_id: A1, agent_type: 'qa', tool: 'Skill', model: 'claude-sonnet-5-5' }],
       ['SubagentStop', { agent_id: A1, agent_type: 'qa' }],
       ['PostToolUse', { tool: 'Agent' }],
       ['Stop', {}],
@@ -148,6 +148,22 @@ describe.each(kinds)('조회 API ($name)', (kind) => {
     expect(d.agents[0]).toMatchObject({ agentId: null, currentTool: null, waitingSince: null, stale: false, calledAgents: [{ subagentType: 'qa', count: 1 }] });
     expect(d.agents[1].skills).toEqual([{ skill: 'playwright-cli', count: 1, lastAt: new Date(T0 + 4000).toISOString() }]);
     expect(d.session).toMatchObject({ key, status: 'done', model: 'claude-haiku-5-5', endedByEvent: false, agentCount: 2 });
+    expect(d.agents.map((a) => a.model)).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5']);
+    expect(d.hiddenAgentCount).toBe(0);
+    // R14: SubagentStop(T0+6s) 60초 뒤부터 BOT 행·agentCount에서 빠지고 저장·스킬 합계는 남는다
+    at(T0 + 6_000 + 60_000);
+    expect((await detail(key)).agents).toHaveLength(2);
+    at(T0 + 6_000 + 60_001);
+    const g = await detail(key);
+    expect(g.agents.map((a) => a.agentKey)).toEqual(['__lead__']);
+    expect(g.session).toMatchObject({ agentCount: 1 });
+    expect(g.hiddenAgentCount).toBe(1);
+    expect(g.skillTotals).toEqual([
+      { skill: 'playwright-cli', count: 1, byRole: { qa: 1 }, lastAt: new Date(T0 + 4000).toISOString() },
+    ]);
+    expect((await sessions()).sessions[0]).toMatchObject({ agentCount: 1 });
+    expect(JSON.stringify(await (await SKILLS(get('/api/skills', { cookie }))).json())).toContain('playwright-cli');
+    at(T0 + 20_000);
     // 2026-11-11 범위 변경: 토큰·API 환산 비용 필드는 응답에 넣지 않는다
     for (const k of ['pricing', 'totals']) {
       expect(d).not.toHaveProperty(k);

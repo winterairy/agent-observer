@@ -2,6 +2,11 @@
  * 순수 reducer: applyEvent(session, event) → session (설계 2절 "상태 계산 규칙").
  * Next.js·fs·Date.now를 쓰지 않는다. 입력 session은 바꾸지 않고 새 객체를 돌려준다.
  *
+ * R12: 처음 보는 agent_id는 SubagentStart·PreToolUse·PostToolUse·permission_prompt일 때만 만든다.
+ * R12a: 그 밖의 이벤트는 통째로 무시하고 null을 돌려준다(세션도 만들지 않음, 저장소 변경 없음).
+ * R14(표시 규칙)는 조회 때 계산한다(state/status의 isListedAgent).
+ * 모델: ev.model이 있으면 늦지 않은 이벤트에 한해 에이전트·lead 세션 모델을 갱신한다.
+ *
  * 순서(D-7): 에이전트별 (lastEventTs, lastSeq)보다 이른 이벤트는 상태 전이를 하지 않고
  * 스킬 기록·세션 lastEventTs 갱신만 한다(ADR A2).
  */
@@ -42,6 +47,7 @@ function newAgent(agentId: string | null, agentType: string | null, ev: Normaliz
     agentId,
     agentType: agentId === null ? null : agentType,
     status: 'done',
+    model: null,
     currentTool: null,
     waitingSinceTs: null,
     lastEventTs: ev.tsMs,
@@ -82,7 +88,7 @@ function transition(agent: AgentState, ev: NormalizedEvent, isNew: boolean): voi
       setStatus(agent, 'working', ev.tool ?? null);
       break;
     case 'PostToolUse': // R4
-      if (agent.status === 'working' || agent.status === 'waiting') setStatus(agent, 'thinking');
+      if (isNew || agent.status === 'working' || agent.status === 'waiting') setStatus(agent, 'thinking');
       break;
     case 'Notification': // R5, R6
       if (ev.notification_type === 'permission_prompt') setStatus(agent, 'waiting');
@@ -104,7 +110,19 @@ function transition(agent: AgentState, ev: NormalizedEvent, isNew: boolean): voi
   }
 }
 
-export function applyEvent(prev: SessionState | null, ev: NormalizedEvent): SessionState {
+/** R12: 처음 보는 agent_id를 만들 수 있는 이벤트 */
+function createsAgent(ev: NormalizedEvent): boolean {
+  return (
+    ev.event === 'SubagentStart' ||
+    ev.event === 'PreToolUse' ||
+    ev.event === 'PostToolUse' ||
+    (ev.event === 'Notification' && ev.notification_type === 'permission_prompt')
+  );
+}
+
+export function applyEvent(prev: SessionState | null, ev: NormalizedEvent): SessionState | null {
+  // R12a: 처음 보는 agent_id의 비생성 이벤트는 통째로 무시(R13 예외 포함)
+  if (ev.agent_id !== null && !createsAgent(ev) && !(prev && getOwn(prev.agents, ev.agent_id))) return null;
   // R13: 처음 보는 세션이면 만든다
   const s: SessionState = prev ? structuredClone(prev) : newSession(ev);
 
@@ -146,7 +164,10 @@ export function applyEvent(prev: SessionState | null, ev: NormalizedEvent): Sess
     agent.lastEventTs = ev.tsMs;
     agent.lastSeq = ev.seq;
     transition(agent, ev, isNew);
-    if (ev.event === 'SessionStart' && ev.agent_id === null && ev.model) s.model = ev.model;
+  }
+  if (!stale && ev.model) {
+    agent.model = ev.model;
+    if (ev.agent_id === null) s.model = ev.model;
   }
 
   // 스킬·BOT 호출 기록(PreToolUse만. PostToolUse에도 같은 필드가 와서 두 번 세지 않게)
