@@ -67,6 +67,6 @@
 ## 기타 규칙
 - 저장소가 공개인 동안 캐릭터 그림, 토큰, 실제 수집 데이터를 커밋하지 않는다(`characters/`, `public/characters/*`, `.env*` 는 gitignore).
 - 원본 Pixel Agent Desk 그림을 쓰거나 본떠 그리지 않는다. `vendor/` 코드는 바로 쓰지 말고 옮겨 고치며 출처를 표시한다(THIRD_PARTY_NOTICES.md).
-- payload의 `usage`(토큰)는 받되 저장하지 않는다. 사용량은 statusLine의 플랜 사용량(rate_limits)으로 본다.
+- payload의 `usage`는 받되 토큰 수는 저장하지 않고 모델 이름(`usage.model`)만 읽어 저장한다(2026-11-25). 사용량은 statusLine의 플랜 사용량(rate_limits)으로 본다.
 - 저장소는 인터페이스로 분리해 메모리/파일 구현을 나중에 Postgres·Redis로 바꿀 수 있게 한다.
 - 로그인한 사용자만 화면을 볼 수 있어야 한다.
