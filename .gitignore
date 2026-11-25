@@ -27,3 +27,6 @@ next-env.d.ts
 # Playwright 결과(스크린샷 보고서는 docs/team/reports/screens/에 따로 저장)
 test-results/
 playwright-report/
+
+# Claude Code 에이전트 임시 작업 폴더(worktree)
+.claude/worktrees/
