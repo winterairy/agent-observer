@@ -59,6 +59,11 @@
 | SEC-04 | Low | 수집 스크립트(statusline.mjs·observe.mjs)가 토큰을 curl 명령줄 인자로 넘겨 `ps`에 보인다 | 설치본이라 dev-team-kit 쪽에서 수정 필요(`-H @-` 등). 이 저장소에서는 고치지 않음 |
 | SEC-05 | Low | 세션 무효화 수단 없음(서명 쿠키 30일) | 1단계 허용. 2단계에서 비밀값 교체 절차 문서화 또는 기간 단축 |
 | SEC-01 잔여 | Low(이슈 아님) | `__proto__` 방어가 dict 접근 규칙 하나에 달림 | 회귀 테스트 `tests/api/protoKeys.test.ts` 유지, 리뷰 때 확인 |
+| LIVE-01 | Medium | 플랜 사용량 첫 전송이 실패해도 "보냄"으로 기록돼 값이 바뀔 때까지 재전송 안 함(statusline.mjs `claimSend`) | dev-team-kit 쪽 수정 필요. docs/team/reports/live-connection-2026-11-25.md |
+| LIVE-02 | Medium | 플랜 값이 `/usage`보다 늦게 반영됨(사용자 관찰, 지연 크기 미측정) | 원인 확인 필요(같은 보고서) |
+| LIVE-03 | Medium | 세션 model이 SessionStart에서만 저장돼, 놓치면 계속 null. `usage.model`은 버려짐 | 서버 수정 필요(같은 보고서) |
+| LIVE-04 | High | Claude Code 내부 에이전트의 SubagentStop만으로 BOT이 계속 생기고, 끝난 BOT이 30분 남음. 비활동 BOT은 지워야 함(사용자 요구) | 서버·화면 수정 필요(같은 보고서) |
+| LIVE-05 | 요구 | 세션 상세 대신 사무실을 메인으로, 사무실에서 모든 정보 파악(사용자 요구 2026-11-25) | 기획·디자인 명세 변경 필요(같은 보고서) |
 | 테스트 | 참고 | E2E "폴링 3초 + 1초" 테스트가 이 환경에서 3.8~4.1초로 4초 경계에 가까워 느린 PC에서 가끔 실패할 수 있음. 가끔 실패하는 단위 테스트 1건이 있을 가능성(책임자 보고, 재현 기록 없음) | 실패 시 재실행으로 구분, 반복되면 기준 여유 검토 |
 
 ## 사용자가 직접 확인할 항목
@@ -68,8 +73,8 @@ QA 미확인 8개(확인 방법은 docs/team/reports/qa-stage1.md "사용자 확
 - [ ] 휴대폰 브라우저에서 로그인 유지(T1-4)
 - [ ] 실제 휴대폰에서 목록 → 상세 화면, 가로 스크롤 없음(T1-5)
 - [ ] 자기 그림을 `characters/`에 넣고 BOT에 지정해 사무실에 보임(T1-6)
-- [ ] 실제 로컬 Claude Code 세션 hook 이벤트가 3~4초 안에 화면에 보임(T1-7)
-- [ ] 구독 계정 플랜 값이 Claude Code `/usage`와 같음(T1-8)
+- [ ] 실제 로컬 Claude Code 세션 hook 이벤트가 3~4초 안에 화면에 보임(T1-7). 2026-11-25: Windows에서 이벤트 수신은 API로 확인, BOT 중복(LIVE-04)·model 누락(LIVE-03) 발견
+- [ ] 구독 계정 플랜 값이 Claude Code `/usage`와 같음(T1-8). 2026-11-25: 값은 오지만 지연 있음(LIVE-01·LIVE-02)
 - [ ] 기존 statusLine이 있는 PC에 설치해도 원래 상태 줄이 그대로, refreshInterval 없음(T1-8)
 - [ ] 클라우드 세션에서 statusLine 값이 옴(T1-8, 2단계 배포 후)
 - [ ] winterairy/dev-team-kit에 statusline 스크립트·설치 방법·기존 statusLine과 함께 쓰는 방법 문서가 있음(T1-8). 같은 저장소에 SEC-04(토큰을 curl 인자로 넘김) 수정 전달
